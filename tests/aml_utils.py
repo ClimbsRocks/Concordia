@@ -1,5 +1,8 @@
-import sys, os
-sys.path = [os.path.abspath(os.path.dirname(__file__))] + sys.path
+import os
+import sys
+
+sys.path = [os.path.join(os.path.abspath(os.getcwd()), 'auto_ml')] + sys.path
+os.environ['is_test_suite'] = 'True'
 
 import pandas as pd
 from sklearn.datasets import load_boston
@@ -8,6 +11,7 @@ from sklearn.model_selection import train_test_split
 
 from auto_ml import Predictor
 
+
 def get_boston_regression_dataset():
     boston = load_boston()
     df_boston = pd.DataFrame(boston.data)
@@ -15,6 +19,7 @@ def get_boston_regression_dataset():
     df_boston['MEDV'] = boston['target']
     df_boston_train, df_boston_test = train_test_split(df_boston, test_size=0.33, random_state=42)
     return df_boston_train, df_boston_test
+
 
 def get_titanic_binary_classification_dataset(basic=True):
     try:
@@ -30,7 +35,7 @@ def get_titanic_binary_classification_dataset(basic=True):
     df_titanic = df_titanic.drop(['boat', 'body'], axis=1)
 
     if basic == True:
-        df_titanic = df_titanic.drop(['name', 'ticket', 'cabin', 'home.dest'], axis=1)
+        df_titanic = df_titanic.drop(['ticket', 'cabin', 'home.dest'], axis=1)
 
     df_titanic_train, df_titanic_test = train_test_split(df_titanic, test_size=0.33, random_state=42)
     return df_titanic_train, df_titanic_test
@@ -40,15 +45,16 @@ def train_basic_binary_classifier():
     df_titanic_train, df_titanic_test = get_titanic_binary_classification_dataset()
     column_descriptions = {
         'survived': 'output'
+        , 'name': 'ignore'
         , 'sex': 'categorical'
         , 'embarked': 'categorical'
         , 'pclass': 'categorical'
     }
 
     ml_predictor = Predictor(type_of_estimator='classifier', column_descriptions=column_descriptions)
-    ml_predictor.train(df_titanic_train)
+    ml_predictor.train(df_titanic_train, verbose=False, perform_feature_scaling=False, model_names=['LGBMClassifier'], perform_feature_selection=False)
 
-    return ml_predictor
+    return ml_predictor, df_titanic_test
 
 
 def train_basic_regressor(df_boston_train):
@@ -105,6 +111,6 @@ def train_basic_multilabel_classifier(df_twitter_train):
     }
 
     ml_predictor = Predictor(type_of_estimator='classifier', column_descriptions=column_descriptions)
-    ml_predictor.train(df_twitter_train)
+    ml_predictor.train(df_twitter_train, verbose=False)
 
     return ml_predictor
