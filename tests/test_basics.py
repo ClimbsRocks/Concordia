@@ -43,7 +43,7 @@ def do_setup():
         , 'port': 6379
     }
 
-    concord = Concordia(in_memory_db_config=in_memory_db_config, persistent_db_config=persistent_db_config, namespace=namespace)
+    concord = Concordia(in_memory_db_config=in_memory_db_config, persistent_db_config=persistent_db_config, namespace=namespace, default_row_id_field='name')
 
     host = in_memory_db_config['host']
     port = in_memory_db_config['port']
@@ -351,6 +351,7 @@ def test_preston_does_not_get_overly_ambitious_in_mvp_scoping():
 
 
 # if __name__ == '__main__':
+#     do_setup()
 #     test_add_new_model()
 #     test_get_model()
 #     test_get_model_after_deleting_from_redis()
