@@ -26,12 +26,12 @@ class Concordia():
     def __init__(self, persistent_db_config=None, in_memory_db_config=None, namespace='_concordia', default_row_id_field=None, save_multiple_feature_copies_for_multi_model_predict=False):
 
         print('Welcome to Concordia! We\'ll do our best to take a couple stressors off your plate and give you more confidence in your machine learning systems in production.')
-        # TODO: Default values
+        # TODO: save everyting to a persistent DB
+        # Then, when people want to load a concordia instance, all they have to do is provide the persistent_db_config, and namespace (and we will, of course, provide defaults for those, so if they're using default configs, it's all automatic)
         self.persistent_db_config = {
             'host': 'localhost'
             , 'port': 27017
             , 'db': '_concordia'
-
         }
 
         if persistent_db_config is not None:
@@ -54,10 +54,21 @@ class Concordia():
 
         self.save_multiple_feature_copies_for_multi_model_predict = save_multiple_feature_copies_for_multi_model_predict
 
+        params_to_save = {
+            'persistent_db_config': self.persistent_db_config
+            , 'in_memory_db_config': self.in_memory_db_config
+            , 'namespace': self.namespace
+            , 'valid_prediction_types': self.valid_prediction_types
+            , 'default_row_id_field': self.default_row_id_field
+            , 'save_multiple_feature_copies_for_multi_model_predict': self.save_multiple_feature_copies_for_multi_model_predict
+        }
+        # TODO: save these params to a DB.
+
 
     def set_params(self, params_dict):
         for k, v in params_dict.items():
             self[k] = v
+
 
 
 
@@ -405,5 +416,10 @@ class Concordia():
 
 
 
-def load_concordia(name, db_connection):
+def load_concordia(name, db_connection, namespace='_concordia'):
+    # make db_connection optional
+    # Load up the data from the db using the db_connection info
+    # then, self._create_db_connections()
+    # then, i think we're set.
+    # we just need to make sure we consistently save all the info we need to the db.
     pass
