@@ -115,6 +115,7 @@ def test_insert_training_features_and_preds():
     df_titanic_test = df_titanic_test.copy()
     df_titanic_test = df_titanic_test.reset_index(drop=True)
     test_preds = ml_predictor_titanic.predict_proba(df_titanic_test)
+    test_labels = df_titanic_test['survived']
     concord.add_data_and_predictions(model_id=model_id, data=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
 
     assert True
@@ -144,14 +145,21 @@ def test_insert_training_features_and_preds():
         pred_row = training_predictions.loc[row['row_id']]
         concord_pred = pred_row['prediction']
         direct_pred = test_preds[idx]
-        print('concord_pred')
-        print(concord_pred)
-        print('direct_pred')
-        print(direct_pred)
         assert round(direct_pred[0], 5) == round(concord_pred[0], 5)
         assert round(direct_pred[1], 5) == round(concord_pred[1], 5)
 
         # TODO: finish this up for actuals too
+        assert row['row_id'] in label_ids
+        label_row = training_labels.loc[row['row_id']]
+        concord_label = label_row['label']
+        direct_label = test_labels[idx]
+        print('concord_label')
+        print(concord_label)
+        print('direct_label')
+        print(direct_label)
+        assert round(direct_label, 5) == round(concord_label, 5)
+        assert round(direct_label, 5) == round(concord_label, 5)
+
 
 
 

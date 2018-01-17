@@ -294,7 +294,7 @@ class Concordia():
                 actuals_docs = []
                 for idx, actual in enumerate(actuals):
                     actual_doc = {
-                        'actuals': actual
+                        'label': actual
                         , 'row_id': row_ids.iloc[idx]
                         , 'model_id': model_id
                     }
