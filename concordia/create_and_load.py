@@ -23,7 +23,7 @@ import redis
 
 class Concordia():
 
-    def __init__(self, persistent_db_config=None, in_memory_db_config=None, namespace='_concordia', default_row_id_field=None, save_multiple_feature_copies_for_multi_model_predict=False):
+    def __init__(self, persistent_db_config=None, in_memory_db_config=None, namespace='_concordia', default_row_id_field=None):
 
         print('Welcome to Concordia! We\'ll do our best to take a couple stressors off your plate and give you more confidence in your machine learning systems in production.')
         # TODO: save everyting to a persistent DB
@@ -49,20 +49,20 @@ class Concordia():
         self._create_db_connections()
 
         self.namespace = namespace
+        # Not sure what the idea was behind valid_prediction_types.
         self.valid_prediction_types = set([str, int, float, list, 'int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64'])
         self.default_row_id_field = default_row_id_field
-
-        self.save_multiple_feature_copies_for_multi_model_predict = save_multiple_feature_copies_for_multi_model_predict
 
         params_to_save = {
             'persistent_db_config': self.persistent_db_config
             , 'in_memory_db_config': self.in_memory_db_config
             , 'namespace': self.namespace
-            , 'valid_prediction_types': self.valid_prediction_types
             , 'default_row_id_field': self.default_row_id_field
-            , 'save_multiple_feature_copies_for_multi_model_predict': self.save_multiple_feature_copies_for_multi_model_predict
+            # , 'valid_prediction_types': self.valid_prediction_types
         }
         # TODO: save these params to a DB.
+
+        self.insert_into_persistent_db(val=params_to_save, val_type='concordia_config', row_id='_intentionally_blank', model_id='_intentionally_blank')
 
 
     def set_params(self, params_dict):
@@ -129,33 +129,115 @@ class Concordia():
     #     pass
 
 
-    def retrieve_from_persistent_db(self, val_type, row_id, model_id):
-        if row_id is not None:
-            result = self.mdb[val_type].find_one({'row_id': row_id, 'model_id': model_id})
-            return result
-        else:
-            results = list(self.mdb[val_type].find({'model_id': model_id}))
+    def retrieve_from_persistent_db(self, val_type, row_id=None, model_id=None):
+        query_params = {
+            'row_id': row_id
+            , 'model_id': model_id
+        }
+        if row_id is None:
+            del query_params['row_id']
+        if model_id is None:
+            del query_params['model_id']
 
-            return results
+        result = self.mdb[val_type].find(query_params)
+
+        # Handle the case where we have multiple predictions from the same row, or any other instances where we have multiple results for the same set of ids
+        if isinstance(result, dict):
+            result = [result]
+        elif not isinstance(result, list):
+            result = list(result)
+
+        return result
+
+
+    def check_row_id(self, val, row_id, idx=None):
+        if isinstance(row_id, list):
+            row_id = row_id[idx]
+        if row_id is None:
+            calculated_row_id = val.get(self.default_row_id_field, None)
+            if calculated_row_id is None:
+                print('You must pass in a row_id for anything that gets saved to the db.')
+                print('This input is missing a value for "row_id"')
+                if self.default_row_id_field is not None:
+                    print('This input is also missing a value for "{}", the default_row_id_field'.format(self.default_row_id_field))
+                raise(ValueError('Missing "row_id" field'))
+            else:
+                row_id = calculated_row_id
+
+        assert row_id is not None
+        val['row_id'] = row_id
+
+        return val
+
+    def check_model_id(self, val, model_id, idx=None):
+        if isinstance(model_id, list):
+            model_id = model_id[idx]
+        if model_id is None:
+            calculated_model_id = val.get('model_id', None)
+            if calculated_model_id is None:
+                print('You must pass in a model_id for anything that gets saved to the db.')
+                print('This input is missing a value for "model_id"')
+                raise(ValueError('Missing "model_id" field'))
+            else:
+                model_id = calculated_model_id
+
+        assert model_id is not None
+        val['model_id'] = model_id
+
+        return val
+
+
+    def _insert_df_into_db(self, df, val_type, row_id, model_id):
+
+        df_cols = set(df.columns)
+        if 'row_id' not in df_cols:
+            if row_id is not None:
+                df['row_id'] = row_id
+            else:
+                if self.default_row_id_field not in df_cols:
+                    print('You must pass in a row_id for anything that gets saved to the db.')
+                    print('This input is missing a value for "row_id"')
+                    if self.default_row_id_field is not None:
+                        print('This input is also missing a value for "{}", the default_row_id_field'.format(self.default_row_id_field))
+                    raise(ValueError('Missing "row_id" field'))
+
+        if 'model_id' not in df_cols:
+            if model_id is not None:
+                df['model_id'] = model_id
+            else:
+                print('You must pass in a model_id for anything that gets saved to the db.')
+                print('This input is missing a value for "model_id"')
+                raise(ValueError('Missing "model_id" field'))
+
+        chunk_min_idx = 0
+        chunk_size = 1000
+
+        while chunk_min_idx < df.shape[0]:
+
+            max_idx = min(df.shape[0], chunk_min_idx + chunk_size)
+            df_chunk = df.iloc[chunk_min_idx: max_idx]
+
+            df_chunk = df_chunk.to_dict('records')
+
+            self.mdb[val_type].insert_many(df_chunk)
+
+            del df_chunk
+            chunk_min_idx += chunk_size
 
 
     def insert_into_persistent_db(self, val, val_type, row_id=None, model_id=None):
+        val = val.copy()
 
         if isinstance(val, dict):
-            assert row_id is not None
-            assert model_id is not None
-            val['row_id'] = row_id
-            val['model_id'] = model_id
-            self.mdb[val_type].insert_one(val)
-        else:
-            for row in val:
-                assert row['row_id'] is not None
-                assert row['model_id'] is not None
+            val = self.check_row_id(val=val, row_id=row_id)
+            val = self.check_model_id(val=val, model_id=model_id)
 
-            self.mdb[val_type].insert_many(val)
+            self.mdb[val_type].insert_one(val)
+
+        else:
+            self._insert_df_into_db(df=val, val_type=val_type, row_id=row_id, model_id=model_id)
 
         return self
-
 
 
     def make_redis_model_key(self, model_id):
@@ -165,19 +247,19 @@ class Concordia():
     def _get_model(self, model_id):
         redis_key_model = self.make_redis_model_key(model_id)
         redis_result = self.rdb.get(redis_key_model)
-        if redis_result is None:
+        if redis_result is 'None' or redis_result is None:
             # Try to get it from MongoDB
-            results = self.retrieve_from_persistent_db(val_type='model_info', row_id=None, model_id=model_id)
-            if results is None:
+            mdb_result = self.retrieve_from_persistent_db(val_type='model_info', row_id=None, model_id=model_id)
+            if mdb_result is None or len(mdb_result) == 0:
                 print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                 print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                 print('We could not find a corresponding model for model_id {}'.format(model_id))
                 print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                 print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-                error_string = 'We could not find a corresponding model for model_id {}'.foramt(model_id)
+                error_string = 'We could not find a corresponding model for model_id {}'.format(model_id)
                 raise(ValueError(error_string))
             else:
-                model = results[0]['model']
+                model = mdb_result[0]['model']
 
                 self.rdb.set(redis_key_model, model)
                 redis_result = self.rdb.get(redis_key_model)
@@ -189,13 +271,10 @@ class Concordia():
 
 
     # This can handle both individual dictionaries and Pandas DataFrames as inputs
-    # TODO: remove train_or_serve, and assume this is training only (and rename method to reflect that)
-        # serving predictions and data are added by calling .predict() or .predict_proba()
     def add_data_and_predictions(self, model_id, data, predictions, row_ids, actuals=None, model_type=None):
 
         data['row_id'] = row_ids
         data['model_id'] = model_id
-        data['training_or_serving'] = train_or_serve
         data['model_type'] = model_type
 
         if isinstance(data, pd.DataFrame):
@@ -223,24 +302,12 @@ class Concordia():
                 actuals_df = pd.DataFrame(actuals_docs)
 
 
-            start_idx = 0
-            chunk_size = 1000
-            while start_idx < data.shape[0]:
-                max_idx = min(start_idx + chunk_size, data.shape[0])
-                df_rel = data.iloc[start_idx: max_idx]
-                df_rel = df_rel.to_dict('records')
-                self.insert_into_persistent_db(val=df_rel, val_type='training_features')
+            self.insert_into_persistent_db(val=data, val_type='training_features')
 
-                pred_rel = predictions_df.iloc[start_idx: max_idx]
-                pred_rel = pred_rel.to_dict('records')
-                self.insert_into_persistent_db(val=pred_rel, val_type='training_predictions')
+            self.insert_into_persistent_db(val=predictions_df, val_type='training_predictions')
 
-                if actuals is not None:
-                    actuals_rel = actuals_df.iloc[start_idx: max_idx]
-                    actuals_rel = actuals_rel.to_dict('records')
-                    self.insert_into_persistent_db(val=actuals_rel, val_type='training_actuals')
-
-                start_idx += chunk_size
+            if actuals is not None:
+                self.insert_into_persistent_db(val=actuals_df, val_type='training_actuals')
 
         elif isinstance(data, dict):
             self.insert_into_persistent_db(val=data, val_type='training_features', row_id=row_id, model_id=model_id)
@@ -257,8 +324,8 @@ class Concordia():
     # FUTURE: add in model_type, which will just get the most recent model_id for that model_type
     # NOTE: we will return whatever the base model returns. We will not modify the output of that model at all (so if the model is an auto_ml model that returns a single float for a single item prediction, that's what we return. if it's a sklearn model that returns a list with a single float in it, that's what we return)
     # NOTE: it is explicitly OK to call predict multiple times with the same data. If you want to filter out duplicate rows, you may do that with "drop_duplicates=True" at analytics time
-    def predict(self, features=None, model_id=None, row_id=None, model_ids=None, shadow_models=None):
-        return self._predict(features=features, model_id=model_id, row_id=row_id, model_ids=model_ids, shadow_models=shadow_models, proba=False)
+    def predict(self, features, model_id, row_id=None, shadow_models=None):
+        return self._predict(features=features, model_id=model_id, row_id=row_id, shadow_models=shadow_models, proba=False)
 
 
     def predict_proba(self, features=None, model_id=None, row_id=None, model_ids=None, shadow_models=None):
@@ -273,63 +340,31 @@ class Concordia():
     def _predict(self, features=None, model_id=None, row_id=None, model_ids=None, shadow_models=None, proba=False):
         if row_id is None and self.default_row_id_field is None:
             raise(ValueError('Missing row_id. Please pass in a value for "model_id", or set a "default_row_id_field" on this Concordia instance'))
-        model_ids = self._get_model_ids(model_id=model_id, model_ids=model_ids)
-        # TODO: raise error if we do not have that model
-        models = []
-        for model_id in model_ids:
-            models.append(self._get_model(model_id=model_id))
 
-        # TODO: handle batch predictions
+        model = self._get_model(model_id=model_id)
+
         if row_id is None:
             row_id = features[self.default_row_id_field]
 
-
-        if len(model_ids) == 0:
-            self.insert_into_persistent_db(val=features, val_type='live_features', row_id=row_id, model_id=model_ids[0])
-        elif self.save_multiple_feature_copies_for_multi_model_predict == True:
-            for idx, model_id in enumerate(model_ids):
-                self.insert_into_persistent_db(val=features, val_type='live_features', row_id=row_id, model_id=model_id)
-        else:
-            self.insert_into_persistent_db(val=features, val_type='live_features', row_id=row_id, model_id=None)
         # FUTURE: input verification here before we get predictions.
+        self.insert_into_persistent_db(val=features, val_type='live_features', row_id=row_id, model_id=model_id)
 
-        predictions = []
-        for model in models:
-            if proba == True:
-                pred = model.predict_proba(features)
-            else:
-                pred = model.predict(features)
-
-            pred_doc = {
-                'prediction': pred
-                , 'row_id': row_id
-                , 'model_id': model_id
-            }
-            self.insert_into_persistent_db(val=pred_doc, val_type='live_predictions', row_id=row_id, model_id=model_id)
-
-            predictions.append(pred)
-
-        if len(model_ids) == 1:
-            return predictions[0]
+        if proba == True:
+            prediction = model.predict_proba(features)
         else:
-            return predictions
+            prediction = model.predict(features)
 
 
-    def _get_model_ids(self, model_id, model_ids):
-        if isinstance(model_id, str):
-            model_id = [model_id]
-        if isinstance(model_ids, str):
-            model_ids = [model_ids]
+        pred_doc = {
+            'prediction': prediction
+            , 'row_id': row_id
+            , 'model_id': model_id
+        }
+        if isinstance(features, pd.DataFrame):
+            pred_doc = pd.DataFrame(pred_doc)
+        self.insert_into_persistent_db(val=pred_doc, val_type='live_predictions', row_id=row_id, model_id=model_id)
 
-        if model_id is not None and model_ids is None:
-            return model_id
-        elif model_ids is not None and model_id is None:
-            return model_ids
-        elif model_id is None and model_ids is None:
-            raise ValueError('Please specify which model_id you want predictions from. Concordia is designed to handle multiple models per each Concordia instance, so you must specify model_id like the following when getting predictions: concord.predict(features=features, model_id=YOUR_MODEL_NAME_HERE).')
-        else:
-            raise ValueError('Please pass in values for only model_id OR model_ids, not both')
-
+        return prediction
 
     def remove_model(model_ids):
         pass
@@ -416,7 +451,22 @@ class Concordia():
 
 
 
-def load_concordia(name, db_connection, namespace='_concordia'):
+def load_concordia(name, persistent_db_config=None, namespace='_concordia'):
+    default_db_config = {
+        'host': 'localhost'
+        , 'port': 27017
+        , 'db': '_concordia'
+    }
+
+    default_db_config.update(persistent_db_config)
+
+    # FUTURE: allow the user to pass in a custom query/db connection, replicating what we do when they do a custom replace of retrieve_from_persistent_db
+    client = MongoClient(host=host, port=port)
+    mdb = client[default_db_config['db']]
+    concordia_info = mdb.find_one({})
+
+    concord = Concordia(**concordia_info)
+
     # make db_connection optional
     # Load up the data from the db using the db_connection info
     # then, self._create_db_connections()
