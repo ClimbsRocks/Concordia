@@ -15,6 +15,10 @@ install:
   - pip install nose
   - pip install --only-binary=numpy,scipy,pandas -r requirements.txt
 
+before_script:
+  - sleep 15
+  - mongo mydb_test --eval 'db.createUser({user:"travis",pwd:"test",roles:["readWrite"]});'
+
 script:
   - nosetests tests
   - coveralls
