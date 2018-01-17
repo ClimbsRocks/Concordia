@@ -4,6 +4,7 @@ import warnings
 
 import dill
 from nose.tools import raises
+import numpy as np
 from pymongo import MongoClient
 
 print('Starting now')
@@ -109,17 +110,49 @@ def test_get_model_after_deleting_from_redis():
     assert type(model) == type(ml_predictor_titanic)
 
 
-# def test_insert_training_features_and_preds():
-#     test_preds = ml_predictor_titanic.predict_proba(df_titanic_test)
-#     concord.add_data_and_predictions(model_id=model_id, data=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
+def test_insert_training_features_and_preds():
+    global df_titanic_test
+    df_titanic_test = df_titanic_test.copy()
+    df_titanic_test = df_titanic_test.reset_index(drop=True)
+    test_preds = ml_predictor_titanic.predict_proba(df_titanic_test)
+    concord.add_data_and_predictions(model_id=model_id, data=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
 
-#     assert True
+    assert True
 
-#     concord_data = concord._get_training_data_and_predictions(model_id)
+    training_features, training_predictions, training_labels = concord._get_training_data_and_predictions(model_id)
 
-#     concord_ids = set(concord_data.row_id)
-#     for row_id in df_titanic_test['row_id']:
-#         assert row_id in concord_ids
+    training_features = training_features.set_index('row_id', drop=False)
+    training_predictions = training_predictions.set_index('row_id', drop=False)
+    training_labels = training_labels.set_index('row_id', drop=False)
+
+    feature_ids = set(training_features['row_id'])
+    prediction_ids = set(training_predictions['row_id'])
+    label_ids = set(training_labels['row_id'])
+
+    for idx, row in df_titanic_test.iterrows():
+        row = row.to_dict()
+        assert row['row_id'] in feature_ids
+        concord_row = training_features.loc[row['row_id']].to_dict()
+
+        for key in df_titanic_test.columns:
+            concord_val = concord_row[key]
+            direct_val = row[key]
+            if direct_val != concord_val:
+                assert (np.isnan(concord_val) and np.isnan(direct_val))
+
+        assert row['row_id'] in prediction_ids
+        pred_row = training_predictions.loc[row['row_id']]
+        concord_pred = pred_row['prediction']
+        direct_pred = test_preds[idx]
+        print('concord_pred')
+        print(concord_pred)
+        print('direct_pred')
+        print(direct_pred)
+        assert round(direct_pred[0], 5) == round(concord_pred[0], 5)
+        assert round(direct_pred[1], 5) == round(concord_pred[1], 5)
+
+        # TODO: finish this up for actuals too
+
 
 
 

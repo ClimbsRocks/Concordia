@@ -292,13 +292,13 @@ class Concordia():
 
             if actuals is not None:
                 actuals_docs = []
-                for idx, pred in enumerate(actuals):
-                    pred_doc = {
-                        'actuals': pred
+                for idx, actual in enumerate(actuals):
+                    actual_doc = {
+                        'actuals': actual
                         , 'row_id': row_ids.iloc[idx]
                         , 'model_id': model_id
                     }
-                    actuals_docs.append(pred_doc)
+                    actuals_docs.append(actual_doc)
                 actuals_df = pd.DataFrame(actuals_docs)
 
 
@@ -307,13 +307,13 @@ class Concordia():
             self.insert_into_persistent_db(val=predictions_df, val_type='training_predictions')
 
             if actuals is not None:
-                self.insert_into_persistent_db(val=actuals_df, val_type='training_actuals')
+                self.insert_into_persistent_db(val=actuals_df, val_type='training_labels')
 
         elif isinstance(data, dict):
             self.insert_into_persistent_db(val=data, val_type='training_features', row_id=row_id, model_id=model_id)
             self.insert_into_persistent_db(val=predictions, val_type='training_predictions', row_id=row_id, model_id=model_id)
             if actuals is not None:
-                self.insert_into_persistent_db(val=actuals, val_type='training_actuals', row_id=row_id, model_id=model_id)
+                self.insert_into_persistent_db(val=actuals, val_type='training_labels', row_id=row_id, model_id=model_id)
 
         return self
 
@@ -379,11 +379,17 @@ class Concordia():
 
 
 
-    def _get_training_data_and_predictions(self, model_id):
+    def _get_training_data_and_predictions(self, model_id, row_id=None):
+        training_features = self.retrieve_from_persistent_db(val_type='training_features', row_id=row_id, model_id=model_id)
+        training_features = pd.DataFrame(training_features)
 
+        training_predictions = self.retrieve_from_persistent_db(val_type='training_predictions', row_id=row_id, model_id=model_id)
+        training_predictions = pd.DataFrame(training_predictions)
 
-        pass
+        training_labels = self.retrieve_from_persistent_db(val_type='training_labels', row_id=row_id, model_id=model_id)
+        training_labels = pd.DataFrame(training_labels)
 
+        return training_features, training_predictions, training_labels
 
     def delete_data(self, model_id, row_ids):
         pass
