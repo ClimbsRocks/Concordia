@@ -7,13 +7,9 @@ from nose.tools import raises
 import numpy as np
 from pymongo import MongoClient
 
-print('Starting now')
-
 sys.path = [os.path.abspath(os.path.dirname(__file__))] + sys.path
 sys.path = [os.path.join(os.path.abspath(os.path.dirname(__file__)), '..')] + sys.path
 os.environ['is_test_suite'] = 'True'
-print('sys.path')
-print(sys.path)
 
 import redis
 
@@ -84,7 +80,6 @@ def test_add_new_model_requires_row_id_field():
 
 
 def test_add_new_model():
-    print('running test now')
 
     redis_key_model = concord.make_redis_model_key(model_id)
     starting_val = rdb.get(redis_key_model)
@@ -153,42 +148,8 @@ def test_insert_training_features_and_preds():
         label_row = training_labels.loc[row['row_id']]
         concord_label = label_row['label']
         direct_label = test_labels[idx]
-        print('concord_label')
-        print(concord_label)
-        print('direct_label')
-        print(direct_label)
         assert round(direct_label, 5) == round(concord_label, 5)
         assert round(direct_label, 5) == round(concord_label, 5)
-
-
-
-
-
-# def test_insert_training_features_and_preds():
-#     test_preds = ml_predictor_titanic.predict_proba(df_titanic_test)
-#     concord.add_data_and_predictions(model_id=model_id, data=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
-
-#     assert True
-
-#     # TODO: we might need to iterate through the generator and append to a list
-#     saved_feature_data = list(mdb.features.find({'model_id': model_id}))
-#     df_saved = pd.DataFrame(saved_feature_data)
-
-#     concord_ids = set(df_saved.name)
-#     for name in df_titanic_test['name']:
-#         assert name in concord_ids
-
-#     # We are assuming our preds are all saved with the row_id
-#     saved_preds = list(mdb.predictions.find({'train_or_serve': 'train', 'model_id': model_id}))
-#     df_preds = pd.DataFrame(saved_preds)
-#     for idx, name in enumerate(df_titanic_test.name):
-#         concord_row = df_preds[df_preds.name == name].to_dict()
-#         assert concord_row['prediction'] == test_preds[idx]
-
-
-
-
-
 
 
 
@@ -196,8 +157,6 @@ def test_insert_training_features_and_preds():
 def test_single_predict_matches_model_prediction():
 
     features = df_titanic_test.iloc[0].to_dict()
-    print('features')
-    print(features)
     concord_pred = concord.predict(features=features, model_id=model_id)
 
     raw_model_pred = ml_predictor_titanic.predict(features)
@@ -233,7 +192,8 @@ def test_predict_adds_features_to_db():
 
     saved_feature = concord.retrieve_from_persistent_db(val_type='live_features', row_id=features['name'], model_id=model_id)
     print('Did we remember to change the .iloc location to 2?')
-    assert len(saved_feature) == 1
+    len_saved_feature = len(saved_feature)
+    assert len_saved_feature == 1
 
 
 def test_predict_multiple_times_with_the_same_features_adds_features_to_db_multiple_times():
@@ -246,12 +206,88 @@ def test_predict_multiple_times_with_the_same_features_adds_features_to_db_multi
     assert raw_model_pred == concord_pred
 
     saved_features = concord.retrieve_from_persistent_db(val_type='live_features', row_id=features['name'], model_id=model_id)
-    assert len(saved_features) == 2
+    len_saved_features = len(saved_features)
+    assert len_saved_features == 2
 
 
 def test_predict_adds_prediction_to_db():
     saved_predictions = concord.retrieve_from_persistent_db(val_type='live_predictions')
-    assert len(saved_predictions) == 3
+    len_saved_predictions = len(saved_predictions)
+    assert len_saved_predictions == 3
+
+
+
+
+
+
+
+
+
+def test_single_predict_proba_matches_model_prediction():
+
+    features = df_titanic_test.iloc[0].to_dict()
+    concord_pred = concord.predict_proba(features=features, model_id=model_id)
+
+    raw_model_pred = ml_predictor_titanic.predict_proba(features)
+
+    assert raw_model_pred[0] == concord_pred[0]
+    assert raw_model_pred[1] == concord_pred[1]
+
+
+
+@raises(ValueError)
+def test_predict_proba_passing_in_missing_model_id_raises_error():
+
+    features = df_titanic_test.iloc[0].to_dict()
+    concord_pred = concord.predict_proba(model_id=None, features=features)
+
+    assert False
+
+@raises(ValueError)
+def test_predict_proba_passing_in_bad_model_id_raises_error():
+
+    features = df_titanic_test.iloc[0].to_dict()
+    concord_pred = concord.predict_proba(model_id='totally_made_up_and_bad_model_id', features=features)
+
+    assert False
+
+
+def test_predict_proba_adds_features_to_db():
+    # TODO: make this a different idx location when we duplicate for proba
+    features = df_titanic_test.iloc[1].to_dict()
+    concord_pred = concord.predict_proba(features=features, model_id=model_id)
+
+    raw_model_pred = ml_predictor_titanic.predict_proba(features)
+
+    assert raw_model_pred[0] == concord_pred[0]
+    assert raw_model_pred[1] == concord_pred[1]
+
+    saved_feature = concord.retrieve_from_persistent_db(val_type='live_features', row_id=features['name'], model_id=model_id)
+    len_saved_feature = len(saved_feature)
+    assert len_saved_feature == 3
+
+
+def test_predict_proba_multiple_times_with_the_same_features_adds_features_to_db_multiple_times():
+    # TODO: make this a different idx location when we duplicate for proba
+    features = df_titanic_test.iloc[1].to_dict()
+    concord_pred = concord.predict_proba(features=features, model_id=model_id)
+
+    raw_model_pred = ml_predictor_titanic.predict_proba(features)
+
+    assert raw_model_pred[0] == concord_pred[0]
+    assert raw_model_pred[1] == concord_pred[1]
+
+    saved_features = concord.retrieve_from_persistent_db(val_type='live_features', row_id=features['name'], model_id=model_id)
+    len_saved_features = len(saved_features)
+    assert len_saved_features == 4
+
+
+def test_predict_proba_adds_prediction_to_db():
+    saved_predictions = concord.retrieve_from_persistent_db(val_type='live_predictions')
+    len_saved_predictions = len(saved_predictions)
+    assert len_saved_predictions == 6
+
+
 
 
 def test_df_predict_matches_model_predictions():
@@ -262,6 +298,19 @@ def test_df_predict_matches_model_predictions():
 
     for idx, pred in enumerate(concord_pred):
         assert pred == concord_pred[idx]
+
+
+def test_df_predict_proba_matches_model_predictions():
+
+    concord_pred = concord.predict_proba(model_id=model_id, features=df_titanic_test)
+
+    raw_model_pred = ml_predictor_titanic.predict_proba(df_titanic_test)
+
+    for idx, pred in enumerate(concord_pred):
+        concord_pred_row = concord_pred[idx]
+        assert pred[0] == concord_pred_row[0]
+        assert pred[1] == concord_pred_row[1]
+
 
 
 ## End section to duplicate for proba

@@ -4,6 +4,7 @@ import json
 import warnings
 
 import dill
+import numpy as np
 import pandas as pd
 import pickle
 from pymongo import MongoClient
@@ -328,8 +329,8 @@ class Concordia():
         return self._predict(features=features, model_id=model_id, row_id=row_id, shadow_models=shadow_models, proba=False)
 
 
-    def predict_proba(self, features=None, model_id=None, row_id=None, model_ids=None, shadow_models=None):
-        pass
+    def predict_proba(self, features, model_id, row_id=None, shadow_models=None):
+        return self._predict(features=features, model_id=model_id, row_id=row_id, shadow_models=shadow_models, proba=True)
 
 
     def predict_all(self, data):
@@ -354,9 +355,19 @@ class Concordia():
         else:
             prediction = model.predict(features)
 
+        # Mongo doesn't handle np.ndarrays. it prefers lists.
+        pred_for_saving = prediction
+        if isinstance(pred_for_saving, np.ndarray):
+            pred_for_saving = list(pred_for_saving)
+            clean_pred_for_saving = []
+            for item in pred_for_saving:
+                if isinstance(item, np.ndarray):
+                    item = list(item)
+                clean_pred_for_saving.append(item)
+            pred_for_saving = clean_pred_for_saving
 
         pred_doc = {
-            'prediction': prediction
+            'prediction': pred_for_saving
             , 'row_id': row_id
             , 'model_id': model_id
         }
