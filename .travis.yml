@@ -3,6 +3,8 @@ dist: trusty
 language: python
 services:
   - mongodb
+  - redis-server
+
 
 python:
   - "2.7"
