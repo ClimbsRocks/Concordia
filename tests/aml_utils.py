@@ -4,6 +4,7 @@ import sys
 sys.path = [os.path.join(os.path.abspath(os.getcwd()), 'auto_ml')] + sys.path
 os.environ['is_test_suite'] = 'True'
 
+import numpy as np
 import pandas as pd
 from sklearn.datasets import load_boston
 from sklearn.metrics import brier_score_loss, mean_squared_error
@@ -42,6 +43,8 @@ def get_titanic_binary_classification_dataset(basic=True):
 
 
 def train_basic_binary_classifier():
+    np.random.seed(0)
+
     df_titanic_train, df_titanic_test = get_titanic_binary_classification_dataset()
     column_descriptions = {
         'survived': 'output'
@@ -58,6 +61,8 @@ def train_basic_binary_classifier():
 
 
 def train_basic_regressor(df_boston_train):
+    np.random.seed(0)
+
     column_descriptions = {
         'MEDV': 'output'
         , 'CHAS': 'categorical'
@@ -101,6 +106,8 @@ def get_twitter_sentiment_multilabel_classification_dataset():
 
 
 def train_basic_multilabel_classifier(df_twitter_train):
+    np.random.seed(0)
+
     column_descriptions = {
         'airline_sentiment': 'output'
         , 'airline': 'categorical'
