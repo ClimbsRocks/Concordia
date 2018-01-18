@@ -306,7 +306,6 @@ def test_df_predict_proba_matches_model_predictions():
         assert pred[1] == concord_pred_row[1]
 
 
-
 ## End section to duplicate for proba
 # TODO: Duplicate all the predic tests
 # Duplicating the above  tests for predict_proba
@@ -374,6 +373,10 @@ def test_df_predict_proba_matches_model_predictions():
 
 #     assert model_descriptions[0]['last_prediction_time'] is None
 #     assert model_descriptions[0]['num_predictions'] == 0
+
+
+
+
 
 
 
