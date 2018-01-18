@@ -5,6 +5,8 @@ services:
   - mongodb
   - redis-server
 
+cache: pip
+
 
 python:
   - "2.7"
