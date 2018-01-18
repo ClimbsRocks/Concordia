@@ -269,6 +269,10 @@ class Concordia():
         try:
             redis_result = dill.loads(codecs.decode(redis_result.encode(), 'base64'))
         except AttributeError:
+            print('redis_result')
+            print(redis_result)
+            print('type(redis_result)')
+            print(type(redis_result))
             redis_result = dill.load(redis_result)
 
         return redis_result
