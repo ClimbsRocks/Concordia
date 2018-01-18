@@ -217,12 +217,6 @@ def test_predict_adds_prediction_to_db():
 
 
 
-
-
-
-
-
-
 def test_single_predict_proba_matches_model_prediction():
 
     features = df_titanic_test.iloc[0].to_dict()

@@ -266,7 +266,10 @@ class Concordia():
                 redis_result = self.rdb.get(redis_key_model)
 
 
-        redis_result = dill.loads(codecs.decode(redis_result.encode(), 'base64'))
+        try:
+            redis_result = dill.loads(codecs.decode(redis_result.encode(), 'base64'))
+        except AttributeError:
+            redis_result = dill.load(redis_result)
 
         return redis_result
 
