@@ -414,8 +414,13 @@ class Concordia():
 
         return training_features, training_predictions, training_labels
 
-    def delete_data(self, model_id, row_ids):
-        pass
+
+
+
+
+
+    # def delete_data(self, model_id, row_ids):
+    #     pass
 
 
 
@@ -423,64 +428,64 @@ class Concordia():
 
 
 
-    def add_outcome_values(self, model_ids, row_ids, y_labels):
-        pass
+    # def add_outcome_values(self, model_ids, row_ids, y_labels):
+    #     pass
 
 
-    def reconcile_predictions(self):
-        pass
+    # def reconcile_predictions(self):
+    #     pass
 
 
-    def reconcile_features(self):
-        pass
+    # def reconcile_features(self):
+    #     pass
 
 
-    def reconcile_labels(self):
-        pass
+    # def reconcile_labels(self):
+    #     pass
 
 
-    def reconcile_all(self):
-        pass
+    # def reconcile_all(self):
+    #     pass
 
 
-    def track_features_over_time(self):
-        pass
+    # def track_features_over_time(self):
+    #     pass
 
 
-    def track_missing_features(self):
-        pass
+    # def track_missing_features(self):
+    #     pass
 
 
-    def get_values(self, model_id, val_type):
-        # val_type is in ['training_features', 'serving_features', 'training_predictions', 'serving_predictions', 'training_labels', 'serving_labels']
-        pass
-
-
-
+    # def get_values(self, model_id, val_type):
+    #     # val_type is in ['training_features', 'serving_features', 'training_predictions', 'serving_predictions', 'training_labels', 'serving_labels']
+    #     pass
 
 
 
-    # These are explicitly out of scopre for our initial implementation
-    def custom_predict(self):
-        pass
-
-
-    def custom_db_insert(self):
-        pass
-
-
-    # Lay out what the API must be
-        #
-    def custom_db_retrieve(self):
-        pass
-
-
-    def save_from_redis_to_mongo(self):
-        pass
 
 
 
-def load_concordia(name, persistent_db_config=None, namespace='_concordia'):
+    # # These are explicitly out of scopre for our initial implementation
+    # def custom_predict(self):
+    #     pass
+
+
+    # def custom_db_insert(self):
+    #     pass
+
+
+    # # Lay out what the API must be
+    #     #
+    # def custom_db_retrieve(self):
+    #     pass
+
+
+    # def save_from_redis_to_mongo(self):
+    #     pass
+
+
+
+def load_concordia(persistent_db_config=None, namespace='_concordia'):
     default_db_config = {
         'host': 'localhost'
         , 'port': 27017
@@ -489,10 +494,20 @@ def load_concordia(name, persistent_db_config=None, namespace='_concordia'):
 
     default_db_config.update(persistent_db_config)
 
+    print('default_db_config')
+    print(default_db_config)
+
     # FUTURE: allow the user to pass in a custom query/db connection, replicating what we do when they do a custom replace of retrieve_from_persistent_db
-    client = MongoClient(host=host, port=port)
+    client = MongoClient(host=default_db_config['host'], port=default_db_config['port'])
     mdb = client[default_db_config['db']]
-    concordia_info = mdb.find_one({})
+    concordia_info = mdb['concordia_config'].find_one({})
+
+    if 'model_id' in concordia_info:
+        del concordia_info['model_id']
+    if '_id' in concordia_info:
+        del concordia_info['_id']
+    if 'row_id' in concordia_info:
+        del concordia_info['row_id']
 
     concord = Concordia(**concordia_info)
 
@@ -501,4 +516,4 @@ def load_concordia(name, persistent_db_config=None, namespace='_concordia'):
     # then, self._create_db_connections()
     # then, i think we're set.
     # we just need to make sure we consistently save all the info we need to the db.
-    pass
+    return concord
