@@ -233,7 +233,12 @@ class Concordia():
             val = self.check_row_id(val=val, row_id=row_id)
             val = self.check_model_id(val=val, model_id=model_id)
 
+            for k, v in val.items():
+                if isinstance(v, np.generic):
+                    val[k] = np.asscalar(v)
+
             self.mdb[val_type].insert_one(val)
+
 
         else:
             self._insert_df_into_db(df=val, val_type=val_type, row_id=row_id, model_id=model_id)
@@ -266,7 +271,7 @@ class Concordia():
                 redis_result = self.rdb.get(redis_key_model)
 
 
-        redis_result = dill.loads(codecs.decode(codecs.encode(redis_result, 'utf-8'), 'base64'))
+        redis_result = dill.loads(codecs.decode(redis_result, 'base64'))
         # try:
         # except AttributeError:
         #     print('redis_result')
