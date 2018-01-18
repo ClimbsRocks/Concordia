@@ -11,24 +11,11 @@ from pymongo import MongoClient
 import redis
 
 
-
-# Implementation Thoughts
-# We will have only a handful of collections
-    # features
-    # predictions
-    # labels
-# Then, each collection will use a compound index of the following fields
-    # model_id
-    # train_or_serve
-    # row_id
-
 class Concordia():
 
     def __init__(self, persistent_db_config=None, in_memory_db_config=None, namespace='_concordia', default_row_id_field=None):
 
         print('Welcome to Concordia! We\'ll do our best to take a couple stressors off your plate and give you more confidence in your machine learning systems in production.')
-        # TODO: save everyting to a persistent DB
-        # Then, when people want to load a concordia instance, all they have to do is provide the persistent_db_config, and namespace (and we will, of course, provide defaults for those, so if they're using default configs, it's all automatic)
         self.persistent_db_config = {
             'host': 'localhost'
             , 'port': 27017
@@ -50,7 +37,6 @@ class Concordia():
         self._create_db_connections()
 
         self.namespace = namespace
-        # Not sure what the idea was behind valid_prediction_types.
         self.valid_prediction_types = set([str, int, float, list, 'int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64'])
         self.default_row_id_field = default_row_id_field
 
@@ -59,9 +45,7 @@ class Concordia():
             , 'in_memory_db_config': self.in_memory_db_config
             , 'namespace': self.namespace
             , 'default_row_id_field': self.default_row_id_field
-            # , 'valid_prediction_types': self.valid_prediction_types
         }
-        # TODO: save these params to a DB.
 
         self.insert_into_persistent_db(val=params_to_save, val_type='concordia_config', row_id='_intentionally_blank', model_id='_intentionally_blank')
 
@@ -100,7 +84,6 @@ class Concordia():
         stringified_model = codecs.encode(dill.dumps(model), 'base64').decode()
         self.rdb.set(redis_key_model, stringified_model)
 
-        # redis_key_model_info = '{}_{}_{}'.format(self.namespace, model_id, 'model_info')
         # TODO: get feature names automatically if possible
 
         mdb_doc = {
@@ -112,11 +95,7 @@ class Concordia():
             , 'feature_importances': feature_importances
             , 'description': description
             , 'date_added': datetime.datetime.now()
-            # TODO: query these from our predictions table
-            # , 'num_predictions': 0
-            # , 'last_prediction_time': None
         }
-        # self.mdb['_example_collection'].insert_one(mdb_doc)
         self.insert_into_persistent_db(mdb_doc, val_type=mdb_doc['val_type'], row_id=mdb_doc['model_id'], model_id=mdb_doc['model_id'])
 
         return self
@@ -124,10 +103,6 @@ class Concordia():
 
     def list_all_models(self):
         pass
-
-
-    # def insert_into_in_memory_db(self, val, val_type, row_id, model_id):
-    #     pass
 
 
     def retrieve_from_persistent_db(self, val_type, row_id=None, model_id=None):
@@ -272,13 +247,6 @@ class Concordia():
 
 
         redis_result = dill.loads(codecs.decode(redis_result, 'base64'))
-        # try:
-        # except AttributeError:
-        #     print('redis_result')
-        #     print(redis_result)
-        #     print('type(redis_result)')
-        #     print(type(redis_result))
-        #     redis_result = dill.load(redis_result)
 
         return redis_result
 
@@ -349,7 +317,6 @@ class Concordia():
         pass
 
 
-    # TODO: right now I think this all assumes single item predictions, not batch predictions on many rows
     def _predict(self, features=None, model_id=None, row_id=None, model_ids=None, shadow_models=None, proba=False):
         if row_id is None and self.default_row_id_field is None:
             raise(ValueError('Missing row_id. Please pass in a value for "model_id", or set a "default_row_id_field" on this Concordia instance'))
@@ -396,8 +363,6 @@ class Concordia():
     def load_from_db(self, query_params, start_time=None, end_time=None, num_results=None):
         if start_time is not None:
             query_params['']
-
-        # results = mdb.
         pass
 
 
@@ -511,9 +476,4 @@ def load_concordia(persistent_db_config=None, namespace='_concordia'):
 
     concord = Concordia(**concordia_info)
 
-    # make db_connection optional
-    # Load up the data from the db using the db_connection info
-    # then, self._create_db_connections()
-    # then, i think we're set.
-    # we just need to make sure we consistently save all the info we need to the db.
     return concord
