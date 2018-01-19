@@ -62,21 +62,6 @@ model_id = 'ml_predictor_titanic_1'
 ml_predictor_titanic, df_titanic_test, concord, rdb, mdb = do_setup()
 
 
-
-
-# @raises(ValueError)
-# def test_add_new_model_requires_row_id_field():
-
-#     redis_key_model = concord.make_redis_model_key(model_id)
-#     starting_val = rdb.get(redis_key_model)
-
-#     assert starting_val is None
-
-
-#     concord.add_model(model=ml_predictor_titanic, model_id=model_id)
-#     assert False
-
-
 def test_add_new_model():
 
     redis_key_model = concord.make_redis_model_key(model_id)

@@ -79,8 +79,6 @@ class Concordia():
         # maybe even take in errors='raise', but let the user pass in 'ignore' and 'warn' instead
 
         redis_key_model = self.make_redis_model_key(model_id)
-        print('redis_key_model inside add_model')
-        print(redis_key_model)
         stringified_model = codecs.encode(dill.dumps(model), 'base64').decode()
         self.rdb.set(redis_key_model, stringified_model)
 
@@ -226,8 +224,6 @@ class Concordia():
 
     def _get_model(self, model_id):
         redis_key_model = self.make_redis_model_key(model_id)
-        print('redis_key_model')
-        print(redis_key_model)
         redis_result = self.rdb.get(redis_key_model)
         if redis_result is 'None' or redis_result is None:
             # Try to get it from MongoDB
@@ -460,9 +456,6 @@ def load_concordia(persistent_db_config=None):
 
     if persistent_db_config is not None:
         default_db_config.update(persistent_db_config)
-
-    print('default_db_config')
-    print(default_db_config)
 
     # FUTURE: allow the user to pass in a custom query/db connection, replicating what we do when they do a custom replace of retrieve_from_persistent_db
     client = MongoClient(host=default_db_config['host'], port=default_db_config['port'])
