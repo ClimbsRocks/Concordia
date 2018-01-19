@@ -458,7 +458,8 @@ def load_concordia(persistent_db_config=None):
         , 'db': '_concordia'
     }
 
-    default_db_config.update(persistent_db_config)
+    if persistent_db_config is not None:
+        default_db_config.update(persistent_db_config)
 
     print('default_db_config')
     print(default_db_config)
