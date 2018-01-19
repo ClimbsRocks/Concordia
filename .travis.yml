@@ -17,8 +17,7 @@ python:
 install:
   - TEST_DIR=$PWD
   - pip install --upgrade pip setuptools wheel
-  - pip install coveralls
-  - pip install nose
+  - pip install coveralls, nose, rednose
   - pip install --only-binary=numpy,scipy,pandas -r requirements.txt
 
 before_script:
