@@ -200,6 +200,10 @@ class Concordia():
 
     def insert_into_persistent_db(self, val, val_type, row_id=None, model_id=None):
         val = val.copy()
+        if '_id' in val:
+            del val['_id']
+        if '_id_' in val:
+            del val['_id_']
 
         if isinstance(val, dict):
             val = self.check_row_id(val=val, row_id=row_id)
