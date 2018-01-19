@@ -302,11 +302,11 @@ class Concordia():
     # FUTURE: add in model_type, which will just get the most recent model_id for that model_type
     # NOTE: we will return whatever the base model returns. We will not modify the output of that model at all (so if the model is an auto_ml model that returns a single float for a single item prediction, that's what we return. if it's a sklearn model that returns a list with a single float in it, that's what we return)
     # NOTE: it is explicitly OK to call predict multiple times with the same data. If you want to filter out duplicate rows, you may do that with "drop_duplicates=True" at analytics time
-    def predict(self, features, model_id, row_id=None, shadow_models=None):
+    def predict(self, model_id, features, row_id=None, shadow_models=None):
         return self._predict(features=features, model_id=model_id, row_id=row_id, shadow_models=shadow_models, proba=False)
 
 
-    def predict_proba(self, features, model_id, row_id=None, shadow_models=None):
+    def predict_proba(self, model_id, features, row_id=None, shadow_models=None):
         return self._predict(features=features, model_id=model_id, row_id=row_id, shadow_models=shadow_models, proba=True)
 
 
