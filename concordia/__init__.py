@@ -1,1 +1,1 @@
-from .create_and_load import Concordia, load_concordia
+from .Concordia_logic import Concordia, load_concordia

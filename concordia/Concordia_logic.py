@@ -13,7 +13,7 @@ import redis
 
 class Concordia():
 
-    def __init__(self, persistent_db_config=None, in_memory_db_config=None, namespace='_concordia', default_row_id_field=None):
+    def __init__(self, persistent_db_config=None, in_memory_db_config=None, default_row_id_field=None):
 
         print('Welcome to Concordia! We\'ll do our best to take a couple stressors off your plate and give you more confidence in your machine learning systems in production.')
         self.persistent_db_config = {
@@ -36,14 +36,12 @@ class Concordia():
 
         self._create_db_connections()
 
-        self.namespace = namespace
         self.valid_prediction_types = set([str, int, float, list, 'int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64'])
         self.default_row_id_field = default_row_id_field
 
         params_to_save = {
             'persistent_db_config': self.persistent_db_config
             , 'in_memory_db_config': self.in_memory_db_config
-            , 'namespace': self.namespace
             , 'default_row_id_field': self.default_row_id_field
         }
 
@@ -72,23 +70,24 @@ class Concordia():
         return self
 
 
-    def add_model(self, model, model_id, row_id_field=None, feature_names=None, feature_importances=None, description=None):
-        # FUTURE: allow the user to not use a row_id_field and just track live predictions. we will likely add in our own prediction_id field
-        if row_id_field is None:
-            raise(ValueError('row_id_field is required. It specifies which feature is going to be unique for each row. row_id_field enables us to compare features between training and serving environments.'))
+    def add_model(self, model, model_id, feature_names=None, feature_importances=None, description=None):
+        # # FUTURE: allow the user to not use a row_id_field and just track live predictions. we will likely add in our own prediction_id field
+        # if row_id_field is None:
+        #     raise(ValueError('row_id_field is required. It specifies which feature is going to be unique for each row. row_id_field enables us to compare features between training and serving environments.'))
         print('One thing to keep in mind is that each model_id must be unique in each db configuration. So if two Concordia instances are using the same database configurations, you should make sure their model_ids do not overlap.')
         # TODO: warn the user if that key exists already
         # maybe even take in errors='raise', but let the user pass in 'ignore' and 'warn' instead
 
         redis_key_model = self.make_redis_model_key(model_id)
+        print('redis_key_model inside add_model')
+        print(redis_key_model)
         stringified_model = codecs.encode(dill.dumps(model), 'base64').decode()
         self.rdb.set(redis_key_model, stringified_model)
 
         # TODO: get feature names automatically if possible
 
         mdb_doc = {
-            'namespace': self.namespace
-            , 'val_type': 'model_info'
+            'val_type': 'model_info'
             , 'model': stringified_model
             , 'model_id': model_id
             , 'feature_names': feature_names
@@ -222,11 +221,13 @@ class Concordia():
 
 
     def make_redis_model_key(self, model_id):
-        return '{}_{}_{}'.format(self.namespace, model_id, 'model')
+        return '_concordia_{}_{}'.format(model_id, 'model')
 
 
     def _get_model(self, model_id):
         redis_key_model = self.make_redis_model_key(model_id)
+        print('redis_key_model')
+        print(redis_key_model)
         redis_result = self.rdb.get(redis_key_model)
         if redis_result is 'None' or redis_result is None:
             # Try to get it from MongoDB
@@ -450,7 +451,7 @@ class Concordia():
 
 
 
-def load_concordia(persistent_db_config=None, namespace='_concordia'):
+def load_concordia(persistent_db_config=None):
     default_db_config = {
         'host': 'localhost'
         , 'port': 27017
