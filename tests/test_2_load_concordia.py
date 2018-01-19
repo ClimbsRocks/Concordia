@@ -27,7 +27,6 @@ def do_setup():
     row_ids = [i for i in range(df_titanic_test.shape[0])]
     df_titanic_test['row_id'] = row_ids
 
-    namespace = '__test_env'
 
     persistent_db_config = {
         'db': '__concordia_test_env'
@@ -53,7 +52,7 @@ def do_setup():
     client = MongoClient(host=host, port=port)
     mdb = client[db]
 
-    concord = load_concordia(persistent_db_config=persistent_db_config, namespace=namespace)
+    concord = load_concordia(persistent_db_config=persistent_db_config)
 
     existing_training_rows, _, _ = concord._get_training_data_and_predictions(model_id)
     len_existing_training_rows = existing_training_rows.shape[0]
@@ -61,11 +60,11 @@ def do_setup():
     existing_live_rows = concord.retrieve_from_persistent_db(val_type='live_features', row_id=None, model_id=model_id)
     len_existing_live_rows = len(existing_live_rows)
 
-    return ml_predictor_titanic, df_titanic_test, namespace, concord, rdb, mdb, len_existing_training_rows, len_existing_live_rows
+    return ml_predictor_titanic, df_titanic_test, concord, rdb, mdb, len_existing_training_rows, len_existing_live_rows
 
 model_id = 'ml_predictor_titanic_1'
 
-ml_predictor_titanic, df_titanic_test, namespace, concord, rdb, mdb, len_existing_training_rows, len_existing_live_rows = do_setup()
+ml_predictor_titanic, df_titanic_test, concord, rdb, mdb, len_existing_training_rows, len_existing_live_rows = do_setup()
 
 
 len_existing_live_preds = len(concord.retrieve_from_persistent_db(val_type='live_predictions'))

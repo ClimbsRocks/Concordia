@@ -26,8 +26,6 @@ def do_setup():
     row_ids = [i for i in range(df_titanic_test.shape[0])]
     df_titanic_test['row_id'] = row_ids
 
-    namespace = '__test_env'
-
     persistent_db_config = {
         'db': '__concordia_test_env'
         , 'host': 'localhost'
@@ -55,28 +53,28 @@ def do_setup():
 
     rdb.flushdb()
 
-    concord = Concordia(in_memory_db_config=in_memory_db_config, persistent_db_config=persistent_db_config, namespace=namespace, default_row_id_field='name')
+    concord = Concordia(in_memory_db_config=in_memory_db_config, persistent_db_config=persistent_db_config, default_row_id_field='name')
 
-    return ml_predictor_titanic, df_titanic_test, namespace, concord, rdb, mdb
+    return ml_predictor_titanic, df_titanic_test, concord, rdb, mdb
 
 model_id = 'ml_predictor_titanic_1'
 
-ml_predictor_titanic, df_titanic_test, namespace, concord, rdb, mdb = do_setup()
+ml_predictor_titanic, df_titanic_test, concord, rdb, mdb = do_setup()
 
 
 
 
-@raises(ValueError)
-def test_add_new_model_requires_row_id_field():
+# @raises(ValueError)
+# def test_add_new_model_requires_row_id_field():
 
-    redis_key_model = concord.make_redis_model_key(model_id)
-    starting_val = rdb.get(redis_key_model)
+#     redis_key_model = concord.make_redis_model_key(model_id)
+#     starting_val = rdb.get(redis_key_model)
 
-    assert starting_val is None
+#     assert starting_val is None
 
 
-    concord.add_model(model=ml_predictor_titanic, model_id=model_id)
-    assert False
+#     concord.add_model(model=ml_predictor_titanic, model_id=model_id)
+#     assert False
 
 
 def test_add_new_model():
@@ -87,7 +85,7 @@ def test_add_new_model():
     assert starting_val is None
 
 
-    concord.add_model(model=ml_predictor_titanic, model_id=model_id, row_id_field='name')
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id)
 
     post_insert_val = rdb.get(redis_key_model)
     assert post_insert_val is not None
