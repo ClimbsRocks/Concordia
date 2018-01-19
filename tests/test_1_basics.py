@@ -282,6 +282,25 @@ def test_df_predict_proba_matches_model_predictions():
         assert pred[0] == concord_pred_row[0]
         assert pred[1] == concord_pred_row[1]
 
+def test_add_labels_takes_in_single_items_and_lists():
+
+    row = df_titanic_test.iloc[0].to_dict()
+    small_df = df_titanic_test.iloc[:10]
+
+    concord.add_label(row_id=row['name'], model_id=model_id, label=row['survived'])
+    result = concord.retrieve_from_persistent_db(val_type='live_labels', row_id=row['name'], model_id=model_id)
+    assert len(result) == 1
+
+
+    concord.add_label(row_id=small_df['name'], model_id=model_id, label=small_df['survived'])
+    result = concord.retrieve_from_persistent_db(val_type='live_labels', row_id=None, model_id=model_id)
+    assert len(result) == 11
+
+    model_id_list = [model_id for x in range(small_df.shape[0])]
+    concord.add_label(row_id=small_df['name'], model_id=model_id_list, label=small_df['survived'])
+    result = concord.retrieve_from_persistent_db(val_type='live_labels', row_id=None, model_id=model_id)
+    assert len(result) == 21
+
 # def test_list_all_models_returns_useful_info():
 #     model_descriptions = concord.list_all_models()
 

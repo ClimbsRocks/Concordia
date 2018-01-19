@@ -1,6 +1,7 @@
 import codecs
 import datetime
 import json
+import numbers
 import warnings
 
 import dill
@@ -96,6 +97,20 @@ class Concordia():
         self.insert_into_persistent_db(mdb_doc, val_type=mdb_doc['val_type'], row_id=mdb_doc['model_id'], model_id=mdb_doc['model_id'])
 
         return self
+
+    def add_label(self, row_id, model_id, label):
+        label_doc = {
+            'row_id': row_id
+            , 'model_id': model_id
+            , 'label': label
+        }
+
+        if not isinstance(row_id, numbers.Number) and not isinstance(row_id, np.generic) and not isinstance(row_id, str):
+            if isinstance(model_id, str):
+                label_doc['model_id'] = [model_id for x in range(len(row_id))]
+            label_doc = pd.DataFrame(label_doc)
+
+        self.insert_into_persistent_db(val=label_doc, val_type='live_labels', row_id=label_doc['row_id'], model_id=label_doc['model_id'])
 
 
     def list_all_models(self):
@@ -380,9 +395,6 @@ class Concordia():
         training_labels = pd.DataFrame(training_labels)
 
         return training_features, training_predictions, training_labels
-
-
-
 
 
 
