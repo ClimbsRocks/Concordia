@@ -319,6 +319,7 @@ class Concordia():
 
 
     def _predict(self, features=None, model_id=None, row_id=None, model_ids=None, shadow_models=None, proba=False):
+        features = features.copy()
         if row_id is None and self.default_row_id_field is None:
             raise(ValueError('Missing row_id. Please pass in a value for "model_id", or set a "default_row_id_field" on this Concordia instance'))
 
