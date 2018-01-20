@@ -71,6 +71,7 @@ class Concordia():
         return self
 
 
+    # feature_importances is a dict, with keys as feature names, and values being the importance of each feature. it doesn't matter how the imoprtances are calculated, we'll just sort by those values
     def add_model(self, model, model_id, feature_names=None, feature_importances=None, description=None):
         # # FUTURE: allow the user to not use a row_id_field and just track live predictions. we will likely add in our own prediction_id field
         # if row_id_field is None:
@@ -117,7 +118,7 @@ class Concordia():
         pass
 
 
-    def retrieve_from_persistent_db(self, val_type, row_id=None, model_id=None):
+    def retrieve_from_persistent_db(self, val_type, row_id=None, model_id=None, min_date=None, date_field=None):
         query_params = {
             'row_id': row_id
             , 'model_id': model_id
@@ -126,6 +127,12 @@ class Concordia():
             del query_params['row_id']
         if model_id is None:
             del query_params['model_id']
+
+        if min_date is not None:
+            if date_field is None:
+                query_params['_concordia_created_at']: {'$gte': min_date}
+            else:
+                query_params[date_field]: {'$gte': min_date}
 
         result = self.mdb[val_type].find(query_params)
 
@@ -219,6 +226,7 @@ class Concordia():
             del val['_id']
         if '_id_' in val:
             del val['_id_']
+        val['_concordia_created_at'] = datetime.datetime.utcnow()
 
         if isinstance(val, dict):
             val = self.check_row_id(val=val, row_id=row_id)
@@ -380,6 +388,31 @@ class Concordia():
     def load_from_db(self, query_params, start_time=None, end_time=None, num_results=None):
         if start_time is not None:
             query_params['']
+        pass
+
+
+    def match_training_and_live(df_train, df_live, row_id_field=None):
+        # The important part here is our live predictions
+        # So we'll left join the two, keeping all of our live rows
+
+        # TODO: leverage the per-model row_id_field we will build out soon
+        if row_id is None:
+            row_id = self.default_row_id_field
+        df = pd.merge(df_live, df_train, on=row_id, how='left')
+        return df
+
+
+    def analyze_feature_discrepancies(model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True):
+
+        # 1. Get live data (only after min_date)
+        live_features = self.retrieve_from_persistent_db(val_type='live_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
+        # 2. Get training_data (only after min_date- we are only supporting the use case of training data being added after live data)
+        training_features = self.retrieve_from_persistent_db(val_type='training_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
+        # 3. match them up (and provide a reconciliation of what rows do not match)
+        df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
+        # All of the above should be done using helper functions
+        # 4. Go through and analyze all feature discrepancies!
+            # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
         pass
 
 
