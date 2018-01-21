@@ -5,8 +5,9 @@ services:
   - mongodb
   - redis-server
 
-cache: pip
-
+cache:
+    directories:
+        - $HOME/.cache/pip
 
 python:
   - "2.7"
@@ -15,10 +16,9 @@ python:
   - "3.6"
 
 install:
-  - TEST_DIR=$PWD
-  - pip install --upgrade pip setuptools wheel
+  - pip install -U pip wheel
+  - pip install --requirement=$TRAVIS_BUILD_DIR/requirements.txt
   - pip install coveralls nose rednose
-  - pip install --only-binary=numpy,scipy,pandas -r requirements.txt
 
 before_script:
   - mongo mydb_test --eval 'db.createUser({user:"travis",pwd:"test",roles:["readWrite"]});'
