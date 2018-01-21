@@ -3,6 +3,7 @@ import sys
 import time
 import warnings
 
+from auto_ml import load_ml_model
 import dill
 from nose.tools import raises
 import numpy as np
@@ -24,6 +25,11 @@ def do_setup():
     #####################################################################
     # TODO: create another model that uses a different algo (logisticRegression, perhaps), so we can have tests for our logic when using multiple models but each predicting off the same features
     ml_predictor_titanic, df_titanic_test = aml_utils.train_basic_binary_classifier()
+    file_name = '_test_suite_saved_pipeline.dill'
+    ml_predictor_titanic.save(file_name)
+    ml_predictor_titanic = load_ml_model(file_name)
+    os.remove(file_name)
+
     row_ids = [i for i in range(df_titanic_test.shape[0])]
     df_titanic_test['row_id'] = row_ids
 
@@ -127,9 +133,9 @@ def test_load_concordia_existing_training_features_and_preds_match():
         print(row)
 
         print('id')
-        print(row['row_id'])
-        assert row['row_id'] in feature_ids
-        concord_row = training_features.loc[row['row_id']].to_dict()
+        print(row['name'])
+        assert row['name'] in feature_ids
+        concord_row = training_features.loc[row['name']].to_dict()
 
         for key in df_titanic_test.columns:
             concord_val = concord_row[key]
@@ -137,15 +143,15 @@ def test_load_concordia_existing_training_features_and_preds_match():
             if direct_val != concord_val:
                 assert (np.isnan(concord_val) and np.isnan(direct_val))
 
-        assert row['row_id'] in prediction_ids
-        pred_row = training_predictions.loc[row['row_id']]
+        assert row['name'] in prediction_ids
+        pred_row = training_predictions.loc[row['name']]
         concord_pred = pred_row['prediction']
         direct_pred = test_preds[idx]
         assert round(direct_pred[0], 5) == round(concord_pred[0], 5)
         assert round(direct_pred[1], 5) == round(concord_pred[1], 5)
 
-        assert row['row_id'] in label_ids
-        label_row = training_labels.loc[row['row_id']]
+        assert row['name'] in label_ids
+        label_row = training_labels.loc[row['name']]
         concord_label = label_row['label']
         direct_label = test_labels[idx]
         assert round(direct_label, 5) == round(concord_label, 5)

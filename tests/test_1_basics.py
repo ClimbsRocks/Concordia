@@ -28,8 +28,8 @@ def do_setup():
     ml_predictor_titanic.save(file_name)
     ml_predictor_titanic = load_ml_model(file_name)
     os.remove(file_name)
-    row_ids = [i for i in range(df_titanic_test.shape[0])]
-    df_titanic_test['row_id'] = row_ids
+    # row_ids = [i for i in range(df_titanic_test.shape[0])]
+    # df_titanic_test['row_id'] = df_titanic_test.name
 
     persistent_db_config = {
         'db': '__concordia_test_env'
@@ -75,14 +75,6 @@ def test_add_new_model():
     assert starting_val is None
 
     importances_dict = ml_predictor_titanic.feature_importances_
-    # feature_names = ml_predictor_titanic.named_steps['dv'].get_feature_names()
-    # final_model = ml_predictor_titanic.named_steps['final_model'].model
-    # importances = final_model.feature_importances_
-    # importances_dict = {}
-
-    # for idx, name in enumerate(feature_names):
-    #     importances_dict[name] = importances[idx]
-
 
     concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=importances_dict)
 
@@ -103,29 +95,35 @@ def test_get_model_after_deleting_from_redis():
 
 
 def test_insert_training_features_and_preds():
-    global df_titanic_test
-    df_titanic_test = df_titanic_test.copy()
-    df_titanic_test = df_titanic_test.reset_index(drop=True)
-    test_preds = ml_predictor_titanic.predict_proba(df_titanic_test)
-    test_labels = df_titanic_test['survived']
-    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
+    df_titanic_local = df_titanic_test.copy()
+    test_preds = ml_predictor_titanic.predict_proba(df_titanic_local)
+    test_labels = list(df_titanic_local['survived'])
+
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_local, predictions=test_preds, row_ids=df_titanic_local['name'], actuals=df_titanic_local['survived'])
 
     assert True
 
     training_features, training_predictions, training_labels = concord._get_training_data_and_predictions(model_id)
 
-    training_features = training_features.set_index('row_id', drop=False)
+    training_features = training_features.set_index('name', drop=False)
+
+    # training_predictions['name'] = training_predictions.row_id
     training_predictions = training_predictions.set_index('row_id', drop=False)
+
+    # training_labels['name'] = training_predictions.row_id
     training_labels = training_labels.set_index('row_id', drop=False)
 
     feature_ids = set(training_features['row_id'])
     prediction_ids = set(training_predictions['row_id'])
     label_ids = set(training_labels['row_id'])
 
-    for idx, row in df_titanic_test.iterrows():
+
+
+    idx = 0
+    for , row in df_titanic_test.iterrows():
         row = row.to_dict()
-        assert row['row_id'] in feature_ids
-        concord_row = training_features.loc[row['row_id']].to_dict()
+        assert row['name'] in feature_ids
+        concord_row = training_features.loc[row['name']].to_dict()
 
         for key in df_titanic_test.columns:
             concord_val = concord_row[key]
@@ -133,19 +131,20 @@ def test_insert_training_features_and_preds():
             if direct_val != concord_val:
                 assert (np.isnan(concord_val) and np.isnan(direct_val))
 
-        assert row['row_id'] in prediction_ids
-        pred_row = training_predictions.loc[row['row_id']]
+        assert row['name'] in prediction_ids
+        pred_row = training_predictions.loc[row['name']]
         concord_pred = pred_row['prediction']
         direct_pred = test_preds[idx]
         assert round(direct_pred[0], 5) == round(concord_pred[0], 5)
         assert round(direct_pred[1], 5) == round(concord_pred[1], 5)
 
-        assert row['row_id'] in label_ids
-        label_row = training_labels.loc[row['row_id']]
+        assert row['name'] in label_ids
+        label_row = training_labels.loc[row['name']]
         concord_label = label_row['label']
         direct_label = test_labels[idx]
         assert round(direct_label, 5) == round(concord_label, 5)
         assert round(direct_label, 5) == round(concord_label, 5)
+        idx += 1
 
 
 
