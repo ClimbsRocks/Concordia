@@ -2,6 +2,7 @@ import os
 import sys
 import warnings
 
+from auto_ml import load_ml_model
 import dill
 from nose.tools import raises
 import numpy as np
@@ -23,6 +24,10 @@ def do_setup():
     #####################################################################
     # TODO: create another model that uses a different algo (logisticRegression, perhaps), so we can have tests for our logic when using multiple models but each predicting off the same features
     ml_predictor_titanic, df_titanic_test = aml_utils.train_basic_binary_classifier()
+    file_name = '_test_suite_saved_pipeline.dill'
+    ml_predictor_titanic.save(file_name)
+    ml_predictor_titanic = load_ml_model(file_name)
+    os.remove(file_name)
     row_ids = [i for i in range(df_titanic_test.shape[0])]
     df_titanic_test['row_id'] = row_ids
 
@@ -69,13 +74,14 @@ def test_add_new_model():
 
     assert starting_val is None
 
-    feature_names = ml_predictor_titanic.named_steps['dv'].get_feature_names()
-    final_model = ml_predictor_titanic.named_steps['final_model'].model
-    importances = final_model.feature_importances_
-    importances_dict = {}
+    importances_dict = ml_predictor_titanic.feature_importances_
+    # feature_names = ml_predictor_titanic.named_steps['dv'].get_feature_names()
+    # final_model = ml_predictor_titanic.named_steps['final_model'].model
+    # importances = final_model.feature_importances_
+    # importances_dict = {}
 
-    for idx, name in enumerate(feature_names):
-        importances_dict[name] = importances[idx]
+    # for idx, name in enumerate(feature_names):
+    #     importances_dict[name] = importances[idx]
 
 
     concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=importances_dict)
