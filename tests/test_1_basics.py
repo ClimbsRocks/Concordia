@@ -120,7 +120,7 @@ def test_insert_training_features_and_preds():
 
 
     idx = 0
-    for , row in df_titanic_test.iterrows():
+    for _, row in df_titanic_test.iterrows():
         row = row.to_dict()
         assert row['name'] in feature_ids
         concord_row = training_features.loc[row['name']].to_dict()
