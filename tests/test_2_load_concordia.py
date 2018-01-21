@@ -328,7 +328,7 @@ def test_load_concordia_insert_training_features_and_preds_again():
     df_titanic_test = df_titanic_test.reset_index(drop=True)
     test_preds = ml_predictor_titanic.predict_proba(df_titanic_test)
     test_labels = df_titanic_test['survived']
-    concord.add_data_and_predictions(model_id=model_id, data=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
 
     assert True
 

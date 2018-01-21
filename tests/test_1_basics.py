@@ -69,8 +69,16 @@ def test_add_new_model():
 
     assert starting_val is None
 
+    feature_names = model.named_steps['dv'].get_feature_names()
+    final_model = model.named_steps['final_model'].model
+    importances = final_model.feature_importances_
+    importances_dict = {}
 
-    concord.add_model(model=ml_predictor_titanic, model_id=model_id)
+    for idx, name in enumerate(feature_names):
+        importances_dict[name] = importances[idx]
+
+
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=importances_dict)
 
     post_insert_val = rdb.get(redis_key_model)
     assert post_insert_val is not None
@@ -94,7 +102,7 @@ def test_insert_training_features_and_preds():
     df_titanic_test = df_titanic_test.reset_index(drop=True)
     test_preds = ml_predictor_titanic.predict_proba(df_titanic_test)
     test_labels = df_titanic_test['survived']
-    concord.add_data_and_predictions(model_id=model_id, data=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=test_preds, row_ids=df_titanic_test['name'], actuals=df_titanic_test['survived'])
 
     assert True
 
