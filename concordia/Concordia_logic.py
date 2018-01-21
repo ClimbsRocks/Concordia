@@ -134,9 +134,9 @@ class Concordia():
 
         if min_date is not None:
             if date_field is None:
-                query_params['_concordia_created_at']: {'$gte': min_date}
+                query_params['_concordia_created_at'] = {'$gte': min_date}
             else:
-                query_params[date_field]: {'$gte': min_date}
+                query_params[date_field] = {'$gte': min_date}
 
         result = self.mdb[val_type].find(query_params)
 
