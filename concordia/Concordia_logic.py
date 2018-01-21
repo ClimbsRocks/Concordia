@@ -85,13 +85,17 @@ class Concordia():
         self.rdb.set(redis_key_model, stringified_model)
 
         # TODO: get feature names automatically if possible
+        for k, v in feature_importances.items():
+            if isinstance(v, np.generic):
+                feature_importances[k] = np.asscalar(v)
+
 
         mdb_doc = {
             'val_type': 'model_info'
             , 'model': stringified_model
             , 'model_id': model_id
             , 'feature_names': feature_names
-            , 'feature_importances': feature_importances
+            , 'feature_importances': json.dumps(feature_importances)
             , 'description': description
             , 'date_added': datetime.datetime.now()
         }
@@ -276,7 +280,7 @@ class Concordia():
 
 
     # This can handle both individual dictionaries and Pandas DataFrames as inputs
-    def add_data_and_predictions(self, model_id, data, predictions, row_ids, actuals=None, model_type=None):
+    def add_data_and_predictions(self, model_id, features, predictions, row_ids, actuals=None, model_type=None):
 
         data['row_id'] = row_ids
         data['model_id'] = model_id
