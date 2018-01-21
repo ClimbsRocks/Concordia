@@ -282,11 +282,13 @@ class Concordia():
     # This can handle both individual dictionaries and Pandas DataFrames as inputs
     def add_data_and_predictions(self, model_id, features, predictions, row_ids, actuals=None, model_type=None):
 
-        data['row_id'] = row_ids
-        data['model_id'] = model_id
-        data['model_type'] = model_type
+        features = features.copy()
 
-        if isinstance(data, pd.DataFrame):
+        features['row_id'] = row_ids
+        features['model_id'] = model_id
+        features['model_type'] = model_type
+
+        if isinstance(features, pd.DataFrame):
             prediction_docs = []
             for idx, pred in enumerate(predictions):
                 if type(pred) not in self.valid_prediction_types:
@@ -311,15 +313,15 @@ class Concordia():
                 actuals_df = pd.DataFrame(actuals_docs)
 
 
-            self.insert_into_persistent_db(val=data, val_type='training_features')
+            self.insert_into_persistent_db(val=features, val_type='training_features')
 
             self.insert_into_persistent_db(val=predictions_df, val_type='training_predictions')
 
             if actuals is not None:
                 self.insert_into_persistent_db(val=actuals_df, val_type='training_labels')
 
-        elif isinstance(data, dict):
-            self.insert_into_persistent_db(val=data, val_type='training_features', row_id=row_id, model_id=model_id)
+        elif isinstance(features, dict):
+            self.insert_into_persistent_db(val=features, val_type='training_features', row_id=row_id, model_id=model_id)
             self.insert_into_persistent_db(val=predictions, val_type='training_predictions', row_id=row_id, model_id=model_id)
             if actuals is not None:
                 self.insert_into_persistent_db(val=actuals, val_type='training_labels', row_id=row_id, model_id=model_id)
@@ -522,6 +524,8 @@ def load_concordia(persistent_db_config=None):
         del concordia_info['_id']
     if 'row_id' in concordia_info:
         del concordia_info['row_id']
+    if '_concordia_created_at' in concordia_info:
+        del concordia_info['_concordia_created_at']
 
     concord = Concordia(**concordia_info)
 
