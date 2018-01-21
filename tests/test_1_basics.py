@@ -2,7 +2,7 @@ import os
 import sys
 import warnings
 
-from auto_ml import load_ml_model
+from auto_ml.utils_models import load_ml_model
 import dill
 from nose.tools import raises
 import numpy as np
