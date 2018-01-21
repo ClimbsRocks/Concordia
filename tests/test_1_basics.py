@@ -69,8 +69,8 @@ def test_add_new_model():
 
     assert starting_val is None
 
-    feature_names = model.named_steps['dv'].get_feature_names()
-    final_model = model.named_steps['final_model'].model
+    feature_names = ml_predictor_titanic.named_steps['dv'].get_feature_names()
+    final_model = ml_predictor_titanic.named_steps['final_model'].model
     importances = final_model.feature_importances_
     importances_dict = {}
 
