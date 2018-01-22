@@ -356,16 +356,14 @@ class Concordia():
 
     def _predict(self, features=None, model_id=None, row_id=None, model_ids=None, shadow_models=None, proba=False):
         features = features.copy()
-        if row_id is None and self.default_row_id_field is None:
-            raise(ValueError('Missing row_id. Please pass in a value for "model_id", or set a "default_row_id_field" on this Concordia instance'))
 
         model = self._get_model(model_id=model_id)
 
-        if row_id is None:
-            row_id = features[self.default_row_id_field]
-
         # FUTURE: input verification here before we get predictions.
         self.insert_into_persistent_db(val=features, val_type='live_features', row_id=row_id, model_id=model_id)
+
+        if row_id is None:
+            row_id = features[self.default_row_id_field]
 
         if proba == True:
             prediction = model.predict_proba(features)
