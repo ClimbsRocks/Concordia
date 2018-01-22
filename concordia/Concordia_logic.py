@@ -119,8 +119,15 @@ class Concordia():
         self.insert_into_persistent_db(val=label_doc, val_type='live_labels', row_id=label_doc['row_id'], model_id=label_doc['model_id'])
 
 
-    def list_all_models(self):
-        pass
+    def list_all_models(self, verbose=True):
+        live_models = self.retrieve_from_persistent_db(val_type='model_info')
+        if verbose:
+            print('Here are all the models that have been added to concordia for live predictions:')
+            model_names = [x['model_id'] for x in live_models]
+            print(model_names)
+        for model_info in live_models:
+            del model_info['model']
+        return live_models
 
 
     def retrieve_from_persistent_db(self, val_type, row_id=None, model_id=None, min_date=None, date_field=None):
@@ -392,33 +399,24 @@ class Concordia():
         pass
 
 
-    def load_from_db(self, query_params, start_time=None, end_time=None, num_results=None):
-        if start_time is not None:
-            query_params['']
-        pass
-
-
     def match_training_and_live(self, df_train, df_live, row_id_field=None):
         # The important part here is our live predictions
         # So we'll left join the two, keeping all of our live rows
 
         # TODO: leverage the per-model row_id_field we will build out soon
-        df = pd.merge(df_live, df_train, on='row_id', how='left', suffixes=('_live', '_train'))
+        # TODO: some accounting for rows that don't match
+        df = pd.merge(df_live, df_train, on='row_id', how='inner', suffixes=('_live', '_train'))
         return df
 
-
-    # def compare_one_row(self, row):
-    #     for key in row.keys():
-    #         print(key)
 
     def compare_one_row_predictions(self, row):
         train_pred = row.prediction_train
         live_pred = row.prediction_live
 
         count_lists = 0
-        if isinstance(train_pred, list):
+        if isinstance(train_pred, list) or isinstance(train_pred, pd.Series):
             count_lists += 1
-        if isinstance(live_pred, list):
+        if isinstance(live_pred, list) or isinstance(live_pred, pd.Series):
             count_lists += 1
         if count_lists == 1:
             print('It appears you are comparing predictions of different types (only one of them is a lsit). This might be from comparing predictions where one was a probability prediction, and one was not. We have not yet built out that functionality. Please make sure all predictions are consistent types.')
@@ -485,16 +483,28 @@ class Concordia():
 
 
 
-    def analyze_prediction_discrepancies(self, model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True):
+    def analyze_prediction_discrepancies(self, model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_nans=True, ignore_duplicates=True):
 
         # 1. Get live data (only after min_date)
         live_predictions = self.retrieve_from_persistent_db(val_type='live_predictions', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
         # 2. Get training_data (only after min_date- we are only supporting the use case of training data being added after live data)
         training_predictions = self.retrieve_from_persistent_db(val_type='training_predictions', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
-        # 3. match them up (and provide a reconciliation of what rows do not match)
 
         live_predictions = pd.DataFrame(live_predictions)
         training_predictions = pd.DataFrame(training_predictions)
+
+        if ignore_nans == True:
+            print('Ignoring nans')
+            live_predictions = live_predictions[pd.notnull(live_predictions.prediction)]
+            training_predictions = training_predictions[pd.notnull(training_predictions.prediction)]
+
+        if ignore_duplicates == True:
+            print('Ignoring duplicates')
+            live_predictions.drop_duplicates(subset='row_id', inplace=True)
+            training_predictions.drop_duplicates(subset='row_id', inplace=True)
+
+        # 3. match them up (and provide a reconciliation of what rows do not match)
+
 
         df_live_and_train = self.match_training_and_live(df_live=live_predictions, df_train=training_predictions)
         # All of the above should be done using helper functions
