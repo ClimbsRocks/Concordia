@@ -96,9 +96,9 @@ def test_load_concordia_get_model_after_deleting_from_redis():
 def test_load_concordia_values_already_exist_in_db():
     training_features, training_predictions, training_labels = concord._get_training_data_and_predictions(model_id)
 
-    assert training_features.shape[0] > 400
-    assert training_predictions.shape[0] > 400
-    assert training_labels.shape[0] > 400
+    assert training_features.shape[0] == 131
+    assert training_predictions.shape[0] == 131
+    assert training_labels.shape[0] == 131
     assert training_features.shape[0] == training_predictions.shape[0] == training_labels.shape[0]
 
 

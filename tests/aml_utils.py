@@ -18,7 +18,7 @@ def get_boston_regression_dataset():
     df_boston = pd.DataFrame(boston.data)
     df_boston.columns = boston.feature_names
     df_boston['MEDV'] = boston['target']
-    df_boston_train, df_boston_test = train_test_split(df_boston, test_size=0.33, random_state=42)
+    df_boston_train, df_boston_test = train_test_split(df_boston, test_size=0.1, random_state=42)
     return df_boston_train, df_boston_test
 
 
@@ -38,7 +38,7 @@ def get_titanic_binary_classification_dataset(basic=True):
     if basic == True:
         df_titanic = df_titanic.drop(['ticket', 'cabin', 'home.dest'], axis=1)
 
-    df_titanic_train, df_titanic_test = train_test_split(df_titanic, test_size=0.33, random_state=42)
+    df_titanic_train, df_titanic_test = train_test_split(df_titanic, test_size=0.1, random_state=42)
     return df_titanic_train, df_titanic_test
 
 
@@ -101,7 +101,7 @@ def get_twitter_sentiment_multilabel_classification_dataset():
 
     df_twitter['tweet_created'] = pd.to_datetime(df_twitter.tweet_created)
 
-    df_twitter_train, df_twitter_test = train_test_split(df_twitter, test_size=0.33, random_state=42)
+    df_twitter_train, df_twitter_test = train_test_split(df_twitter, test_size=0.1, random_state=42)
     return df_twitter_train, df_twitter_test
 
 
