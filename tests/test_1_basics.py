@@ -151,6 +151,8 @@ def test_insert_training_features_and_preds():
 def test_single_predict_matches_model_prediction():
 
     features = df_titanic_test.iloc[0].to_dict()
+    print('features')
+    print(features)
     concord_pred = concord.predict(features=features, model_id=model_id)
 
     raw_model_pred = ml_predictor_titanic.predict(features)
@@ -324,6 +326,36 @@ def test_list_all_models_returns_lots_of_info():
     expected_properties = ['model_id', 'feature_names', 'feature_importances', 'description', 'date_added']
     for prop in expected_properties:
         assert prop in results[0]
+
+def test_set_params_sets_params():
+    concord.set_params({'this_does_not_exist': True})
+    assert concord.this_does_not_exist == True
+
+
+def test_no_row_id_is_ok_with_default_row_id_field():
+
+    features = df_titanic_test.iloc[0].to_dict()
+    print('features')
+    print(features)
+    assert 'name' in features
+    assert 'row_id' not in features
+    check_row_id_result = concord.check_row_id(val=features, row_id=None)
+    assert 'row_id' in check_row_id_result
+
+
+@raises(ValueError)
+def test_no_row_id_throws_error_when_missing_default_field():
+
+    features = df_titanic_test.iloc[0].to_dict()
+    print('features')
+    print(features)
+    del features['name']
+    assert 'name' not in features
+    assert 'row_id' not in features
+    check_row_id_result = concord.check_row_id(val=features, row_id=None)
+
+    assert False
+
 
 # def test_list_all_models_returns_useful_info():
 #     model_descriptions = concord.list_all_models()
