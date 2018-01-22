@@ -25,5 +25,8 @@ before_script:
 
 script:
   - nosetests tests
+
+after_success:
+  # Including all builds in coveralls makes things look hella messy there
   - coveralls
 
