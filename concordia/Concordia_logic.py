@@ -52,7 +52,7 @@ class Concordia():
 
     def set_params(self, params_dict):
         for k, v in params_dict.items():
-            self[k] = v
+            setattr(self, k, v)
 
 
 
@@ -158,8 +158,7 @@ class Concordia():
 
 
     def check_row_id(self, val, row_id, idx=None):
-        if isinstance(row_id, list):
-            row_id = row_id[idx]
+
         if row_id is None:
             calculated_row_id = val.get(self.default_row_id_field, None)
             if calculated_row_id is None:
