@@ -31,8 +31,8 @@ def do_setup():
     ml_predictor_titanic = load_ml_model(file_name)
     os.remove(file_name)
 
-    row_ids = [i for i in range(df_titanic_test.shape[0])]
-    df_titanic_test['row_id'] = row_ids
+    # row_ids = [i for i in range(df_titanic_test.shape[0])]
+    # df_titanic_test['row_id'] = row_ids
 
 
     persistent_db_config = {
