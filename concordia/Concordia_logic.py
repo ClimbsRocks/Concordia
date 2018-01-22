@@ -10,6 +10,7 @@ import pandas as pd
 import pickle
 from pymongo import MongoClient
 import redis
+from tabulate import tabulate
 
 
 class Concordia():
@@ -387,7 +388,7 @@ class Concordia():
 
         return prediction
 
-    def remove_model(model_ids):
+    def remove_model(self, model_ids):
         pass
 
 
@@ -397,29 +398,158 @@ class Concordia():
         pass
 
 
-    def match_training_and_live(df_train, df_live, row_id_field=None):
+    def match_training_and_live(self, df_train, df_live, row_id_field=None):
         # The important part here is our live predictions
         # So we'll left join the two, keeping all of our live rows
 
         # TODO: leverage the per-model row_id_field we will build out soon
-        if row_id is None:
-            row_id = self.default_row_id_field
-        df = pd.merge(df_live, df_train, on=row_id, how='left')
+        df = pd.merge(df_live, df_train, on='row_id', how='left', suffixes=('_live', '_train'))
         return df
 
 
-    def analyze_feature_discrepancies(model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True):
+    # def compare_one_row(self, row):
+    #     for key in row.keys():
+    #         print(key)
+
+    def compare_one_row_predictions(self, row):
+        train_pred = row.prediction_train
+        live_pred = row.prediction_live
+
+        count_lists = 0
+        if isinstance(train_pred, list):
+            count_lists += 1
+        if isinstance(live_pred, list):
+            count_lists += 1
+        if count_lists == 1:
+            print('It appears you are comparing predictions of different types (only one of them is a lsit). This might be from comparing predictions where one was a probability prediction, and one was not. We have not yet built out that functionality. Please make sure all predictions are consistent types.')
+            raise(TypeError('Predictions are of different types. Only one of the predictions is a list'))
+
+        if count_lists == 2:
+            return_val = {}
+            for idx, train_proba_pred in enumerate(train_pred):
+                live_proba_pred = live_pred[idx]
+                return_val['class_{}_delta'.format(idx)] = train_proba_pred - live_proba_pred
+
+        else:
+            delta = train_pred - live_pred
+            return_val = {'delta': delta}
+
+        return pd.Series(return_val)
+
+
+
+    def summarize_one_delta_col(self, deltas, prefix):
+
+        results = {}
+
+        percentiles = [5, 25, 50, 75, 95]
+
+        results['{}_num_rows_with_deltas'.format(prefix)] = len([x for x in deltas if x != 0])
+        results['{}_num_rows_with_no_deltas'.format(prefix)] = len([x for x in deltas if x == 0])
+        results['{}_avg_delta'.format(prefix)] = np.mean(deltas)
+        results['{}_median_delta'.format(prefix)] = np.median(deltas)
+        for percentile in percentiles:
+            results['{}_{}th_percentile_delta'.format(prefix, percentile)] = np.percentile(deltas, percentile)
+
+        abs_deltas = np.abs(deltas)
+        results['{}_avg_abs_delta'.format(prefix)] = np.mean(abs_deltas)
+        results['{}_median_abs_delta'.format(prefix)] = np.median(abs_deltas)
+        for percentile in percentiles:
+            results['{}_{}th_percentile_abs_delta'.format(prefix, percentile)] = np.percentile(abs_deltas, percentile)
+
+        return results
+
+
+    def summarize_prediction_deltas(self, df_deltas):
+        # num_rows_with_deltas
+        # num_rows_with_no_deltas
+        # avg_delta (and by class too, if relevant)
+        # median_delta
+
+        # 5th, 25th, 50th, 75th, and 95th percentile deltas
+        if 'delta' in df_deltas.columns:
+            result = self.summarize_one_delta_col(df_deltas.delta, prefix='prediction')
+
+        else:
+            result = {}
+            for col in df_deltas.columns:
+                if col[-6:] == '_delta':
+                    result.update(self.summarize_one_delta_col(df_deltas[col], col[:-6]))
+
+        return result
+
+
+
+
+
+
+
+
+    def analyze_prediction_discrepancies(self, model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True):
 
         # 1. Get live data (only after min_date)
-        live_features = self.retrieve_from_persistent_db(val_type='live_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
+        live_predictions = self.retrieve_from_persistent_db(val_type='live_predictions', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
         # 2. Get training_data (only after min_date- we are only supporting the use case of training data being added after live data)
-        training_features = self.retrieve_from_persistent_db(val_type='training_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
+        training_predictions = self.retrieve_from_persistent_db(val_type='training_predictions', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
         # 3. match them up (and provide a reconciliation of what rows do not match)
-        df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
+
+        live_predictions = pd.DataFrame(live_predictions)
+        training_predictions = pd.DataFrame(training_predictions)
+
+        df_live_and_train = self.match_training_and_live(df_live=live_predictions, df_train=training_predictions)
         # All of the above should be done using helper functions
         # 4. Go through and analyze all feature discrepancies!
             # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
-        pass
+        deltas = df_live_and_train.apply(self.compare_one_row_predictions, axis=1)
+
+
+        summary = self.summarize_prediction_deltas(df_deltas=deltas)
+
+        print('summary')
+        print(summary)
+
+        return_val = self.create_analytics_return_val(summary=summary, deltas=deltas, matched_rows=df_live_and_train, return_summary=return_summary, return_deltas=return_deltas, return_matched_rows=return_matched_rows, verbose=verbose)
+        return return_val
+
+
+    def create_analytics_return_val(self, summary, deltas, matched_rows, return_summary=True, return_deltas=True, return_matched_rows=False, verbose=True):
+
+        return_val = {}
+        if return_summary == True:
+            return_val['summary'] = summary
+        if return_deltas == True:
+            return_val['deltas'] = deltas
+        if return_matched_rows == True:
+            return_val['matched_rows'] = matched_rows
+
+        if verbose:
+            print('\n\n******************')
+            print('Prediction Deltas:')
+            print('******************\n')
+            # What we want to do here is have each row be a metric, with two columns
+            # The metric name, and the metric value
+            sorted_keys = sorted(summary.keys())
+            printing_val = []
+            for key in sorted_keys:
+                printing_val.append((key, summary[key]))
+            print(tabulate(printing_val, headers=['Metric', 'Value'], floatfmt='.3f', tablefmt='psql'))
+
+        return return_val
+
+
+    # def analyze_feature_discrepancies(model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True):
+
+    #     # 1. Get live data (only after min_date)
+    #     live_features = self.retrieve_from_persistent_db(val_type='live_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
+    #     # 2. Get training_data (only after min_date- we are only supporting the use case of training data being added after live data)
+    #     training_features = self.retrieve_from_persistent_db(val_type='training_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
+    #     # 3. match them up (and provide a reconciliation of what rows do not match)
+    #     df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
+    #     # All of the above should be done using helper functions
+    #     # 4. Go through and analyze all feature discrepancies!
+    #         # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
+    #     deltas = df_live_and_train.apply(compare_one_row, axis=1)
+    #     pass
 
 
 
