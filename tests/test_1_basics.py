@@ -314,6 +314,17 @@ def test_add_labels_takes_in_single_items_and_lists():
     result = concord.retrieve_from_persistent_db(val_type='live_labels', row_id=None, model_id=model_id)
     assert len(result) == 21
 
+
+def test_list_all_models_returns_lots_of_info():
+    results = concord.list_all_models()
+    assert len(results) == 1
+
+    assert 'model' not in results[0]
+
+    expected_properties = ['model_id', 'feature_names', 'feature_importances', 'description', 'date_added']
+    for prop in expected_properties:
+        assert prop in results[0]
+
 # def test_list_all_models_returns_useful_info():
 #     model_descriptions = concord.list_all_models()
 
