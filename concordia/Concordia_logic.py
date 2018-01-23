@@ -433,50 +433,6 @@ class Concordia():
 
 
 
-    def summarize_one_delta_col(self, deltas, prefix):
-
-        results = {}
-
-        percentiles = [5, 25, 50, 75, 95]
-
-        results['{}_num_rows_with_deltas'.format(prefix)] = len([x for x in deltas if x != 0])
-        results['{}_num_rows_with_no_deltas'.format(prefix)] = len([x for x in deltas if x == 0])
-        results['{}_avg_delta'.format(prefix)] = np.mean(deltas)
-        results['{}_median_delta'.format(prefix)] = np.median(deltas)
-        for percentile in percentiles:
-            results['{}_{}th_percentile_delta'.format(prefix, percentile)] = np.percentile(deltas, percentile)
-
-        abs_deltas = np.abs(deltas)
-        results['{}_avg_abs_delta'.format(prefix)] = np.mean(abs_deltas)
-        results['{}_median_abs_delta'.format(prefix)] = np.median(abs_deltas)
-        for percentile in percentiles:
-            results['{}_{}th_percentile_abs_delta'.format(prefix, percentile)] = np.percentile(abs_deltas, percentile)
-
-        return results
-
-
-    def summarize_prediction_deltas(self, df_deltas):
-        # num_rows_with_deltas
-        # num_rows_with_no_deltas
-        # avg_delta (and by class too, if relevant)
-        # median_delta
-
-        # 5th, 25th, 50th, 75th, and 95th percentile deltas
-        if 'delta' in df_deltas.columns:
-            result = self.summarize_one_delta_col(df_deltas.delta, prefix='prediction')
-
-        else:
-            result = {}
-            for col in df_deltas.columns:
-                if col[-6:] == '_delta':
-                    result.update(self.summarize_one_delta_col(df_deltas[col], col[:-6]))
-
-        return result
-
-
-
-
-
 
 
 
@@ -531,7 +487,7 @@ class Concordia():
 
         if verbose:
             print('\n\n******************')
-            print('Prediction Deltas:')
+            print('Deltas:')
             print('******************\n')
             # What we want to do here is have each row be a metric, with two columns
             # The metric name, and the metric value
@@ -543,22 +499,124 @@ class Concordia():
 
         return return_val
 
+    def find_missing_columns(self, df):
+        columns = set(df.columns)
+        results = {
+            'training_columns_not_in_live': []
+            , 'live_columns_not_in_train': []
+            , 'matched_cols': []
+        }
 
-    # def analyze_feature_discrepancies(model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True):
+        for col in df.columns:
+            if col[:-6] == '_train':
+                live_col = col[:-6] + '_live'
+                if live_col not in columns:
+                    results['training_columns_not_in_live'].append(col[:-6])
+                else:
+                    results['matched_cols'].append(col[:-6])
+            elif col[:-5] == '_live':
+                train_col = col[:-5] + '_train'
+                if train_col not in columns:
+                    results['live_columns_not_in_train'].append(col[:-5])
 
-    #     # 1. Get live data (only after min_date)
-    #     live_features = self.retrieve_from_persistent_db(val_type='live_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
-    #     # 2. Get training_data (only after min_date- we are only supporting the use case of training data being added after live data)
-    #     training_features = self.retrieve_from_persistent_db(val_type='training_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
-    #     # 3. match them up (and provide a reconciliation of what rows do not match)
-    #     df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
-    #     # All of the above should be done using helper functions
-    #     # 4. Go through and analyze all feature discrepancies!
-    #         # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
-    #     deltas = df_live_and_train.apply(compare_one_row, axis=1)
-    #     pass
+        return results
 
 
+    def summarize_one_delta_col(self, deltas, prefix):
+
+        results = {}
+
+        percentiles = [5, 25, 50, 75, 95]
+
+        results['{}_num_rows_with_deltas'.format(prefix)] = len([x for x in deltas if x != 0])
+        results['{}_num_rows_with_no_deltas'.format(prefix)] = len([x for x in deltas if x == 0])
+        results['{}_avg_delta'.format(prefix)] = np.mean(deltas)
+        results['{}_median_delta'.format(prefix)] = np.median(deltas)
+        for percentile in percentiles:
+            results['{}_{}th_percentile_delta'.format(prefix, percentile)] = np.percentile(deltas, percentile)
+
+        abs_deltas = np.abs(deltas)
+        results['{}_avg_abs_delta'.format(prefix)] = np.mean(abs_deltas)
+        results['{}_median_abs_delta'.format(prefix)] = np.median(abs_deltas)
+        for percentile in percentiles:
+            results['{}_{}th_percentile_abs_delta'.format(prefix, percentile)] = np.percentile(abs_deltas, percentile)
+
+        return results
+
+
+    def summarize_prediction_deltas(self, df_deltas):
+        if 'delta' in df_deltas.columns:
+            result = self.summarize_one_delta_col(df_deltas.delta, prefix='prediction')
+
+        else:
+            result = {}
+            for col in df_deltas.columns:
+                if col[-6:] == '_delta':
+                    result.update(self.summarize_one_delta_col(df_deltas[col], col[:-6]))
+
+        return result
+
+
+    def summarize_feature_deltas(self, df_deltas, feature_importances):
+        col_results = []
+
+        for col in df_deltas.columns:
+            col_result = self.summarize_one_delta_col(deltas=df_deltas[col], prefix=col)
+            if feature_importances is not None:
+                importance = feature_importances.get(col, 0)
+                col_result['feature_importance'] = importance
+            col_results.append(col_result)
+
+        return col_results
+
+
+    def analyze_feature_discrepancies(model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True):
+
+        # 1. Get live data (only after min_date)
+        live_features = self.retrieve_from_persistent_db(val_type='live_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
+        # 2. Get training_data (only after min_date- we are only supporting the use case of training data being added after live data)
+        training_features = self.retrieve_from_persistent_db(val_type='training_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
+
+        live_features = pd.DataFrame(live_features)
+        training_features = pd.DataFrame(training_features)
+
+        if ignore_duplicates == True:
+            print('Ignoring duplicates')
+            live_features.drop_duplicates(subset='row_id', inplace=True)
+            training_features.drop_duplicates(subset='row_id', inplace=True)
+
+        # 3. match them up (and provide a reconciliation of what rows do not match)
+        df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
+        # All of the above should be done using helper functions
+        # 4. Go through and analyze all feature discrepancies!
+            # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
+        # TODO: find columns missing from only one (train or live)
+        # TODO: find rows missing frm only one (train or live)
+        column_comparison = self.find_missing_columns(df_live_and_train)
+        matched_cols = column_comparison['matched_cols']
+
+        deltas = df_live_and_train.apply(lambda row: compare_one_row(row=row, features_to_compare=matched_cols), axis=1)
+
+        model_info = self.retrieve_from_persistent_db(val_type='model_info', model_id=model_id)
+        feature_importances = model_info['feature_importances']
+        summary_list = self.summarize_feature_deltas(df_deltas=deltas)
+        summary_list = sorted(summary_list, key=lambda val: val['feature_importance'], ascending=False)
+
+        # TODO: figure out what to print, and what to return
+        # TODO: add feature_importance, and sort by it before printing
+
+
+
+
+    def compare_one_row_features(self, row, features_to_compare):
+        result = {}
+        for feature in features_to_compare:
+            train_val = row[feature + '_train']
+            live_val = row[feature + '_live']
+            delta = train_val - live_val
+            result[feature] = delta
+
+        return pd.Series(result)
 
     def _get_training_data_and_predictions(self, model_id, row_id=None):
         training_features = self.retrieve_from_persistent_db(val_type='training_features', row_id=row_id, model_id=model_id)
