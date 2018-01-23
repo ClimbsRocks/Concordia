@@ -8,6 +8,7 @@ from auto_ml import load_ml_model
 import dill
 from nose.tools import raises
 import numpy as np
+import pandas as pd
 from pymongo import MongoClient
 
 sys.path = [os.path.abspath(os.path.dirname(__file__))] + sys.path
@@ -165,7 +166,115 @@ def test_compare_predict_predictions_finds_no_deltas_when_deltas_do_not_exist():
     assert prediction_delta_val == 0
 
 
+def test_find_missing_cols():
+    columns = [
+        'feature_1'
+        , 'feature_2_train'
+        , 'feature_2_live'
+        , 'feature_3_train'
+        , 'feature_3_live'
 
+        , 'feature_4_live'
+
+        , 'feature_5_train'
+    ]
+    df = pd.DataFrame(0, index=np.arange(10), columns=columns)
+    results = concord.find_missing_columns(df)
+
+    assert len(results['matched_cols']) == 2
+    assert 'feature_2' in results['matched_cols']
+    assert 'feature_3' in results['matched_cols']
+    assert len(results['live_columns_not_in_train']) == 1
+    assert 'feature_4' in results['live_columns_not_in_train']
+    assert len(results['train_columns_not_in_live']) == 1
+    assert 'feature_5' in results['train_columns_not_in_live']
+
+
+def test_compare_features_finds_no_deltas_when_deltas_do_not_exist():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=ml_predictor_titanic.feature_importances_)
+
+    concord.predict(model_id, df_titanic_test)
+
+    train_preds = ml_predictor_titanic.predict(df_titanic_test)
+
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=train_preds, row_ids=df_titanic_test.name, actuals=df_titanic_test.survived)
+
+    results = concord.analyze_feature_discrepancies(model_id=model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True)
+
+    print('results')
+    print(results)
+
+    deltas = results['deltas']
+    for col in deltas.columns:
+        prediction_delta_val = round(deltas[col].mean(), 5)
+        assert prediction_delta_val == 0
+
+
+def test_compare_features_works_even_with_no_feature_importances():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=None)
+
+    concord.predict(model_id, df_titanic_test)
+
+    train_preds = ml_predictor_titanic.predict(df_titanic_test)
+
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=train_preds, row_ids=df_titanic_test.name, actuals=df_titanic_test.survived)
+
+    results = concord.analyze_feature_discrepancies(model_id=model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True)
+
+    print('results')
+    print(results)
+
+    deltas = results['deltas']
+    for col in deltas.columns:
+        prediction_delta_val = round(deltas[col].mean(), 5)
+        assert prediction_delta_val == 0
+
+
+@raises(TypeError)
+def test_bad_feature_importances_type_raises_type_error():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=['this will not work'])
+
+
+
+def test_compare_features_finds_deltas_when_deltas_do_exist():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=ml_predictor_titanic.feature_importances_)
+
+    concord.predict(model_id, df_titanic_test)
+
+    col_deltas = {}
+    for col in df_titanic_test.columns:
+        if df_titanic_test[col].dtype != 'object':
+            col_delta = random.random()
+            df_titanic_test[col] = df_titanic_test[col] - col_delta
+            col_deltas[col] = col_delta
+        else:
+            col_deltas[col] = 0
+
+    train_preds = ml_predictor_titanic.predict(df_titanic_test)
+
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=train_preds, row_ids=df_titanic_test.name, actuals=df_titanic_test.survived)
+
+    results = concord.analyze_feature_discrepancies(model_id=model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True)
+
+    deltas = results['deltas']
+    for col in deltas.columns:
+        if col == 'model_id':
+            continue
+        prediction_delta_val = round(np.nanmean(deltas[col].values), 5)
+        delta_val = round(col_deltas[col], 5)
+        if col == 'age':
+            assert prediction_delta_val >= -delta_val
+        else:
+            assert prediction_delta_val == -delta_val
 
 
 
