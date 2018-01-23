@@ -86,9 +86,12 @@ class Concordia():
         self.rdb.set(redis_key_model, stringified_model)
 
         # TODO: get feature names automatically if possible
-        for k, v in feature_importances.items():
-            if isinstance(v, np.generic):
-                feature_importances[k] = np.asscalar(v)
+        if feature_importances is not None:
+            if not isinstance(feature_importances, dict):
+                raise(TypeError('feature_importances must be a dict, where each key is a feature name, and each value is the importance of that feature'))
+            for k, v in feature_importances.items():
+                if isinstance(v, np.generic):
+                    feature_importances[k] = np.asscalar(v)
 
 
         mdb_doc = {
@@ -359,11 +362,11 @@ class Concordia():
 
         model = self._get_model(model_id=model_id)
 
+        if row_id is None:
+            row_id = features[self.default_row_id_field]
         # FUTURE: input verification here before we get predictions.
         self.insert_into_persistent_db(val=features, val_type='live_features', row_id=row_id, model_id=model_id)
 
-        if row_id is None:
-            row_id = features[self.default_row_id_field]
 
         if proba == True:
             prediction = model.predict_proba(features)
@@ -392,8 +395,14 @@ class Concordia():
 
         return prediction
 
-    def remove_model(self, model_ids):
-        pass
+    # def remove_model(self, model_id, verbose=True):
+    #     if verbose == True:
+    #         print('Removing model {}'.format(model_id))
+    #         print('Note that this will remove the model from being able to make predictions.')
+    #         print('We will keep historical data associated with this model (features, predictions, labels, etc.) so you can continue to perform analysis on it.')
+    #     # TODO: remove the model from our model_info table.
+    #     # This is the only place we are deleting something from the db, so we might need to create a new helper function (delete_from_db) for it.
+    #     pass
 
 
     def match_training_and_live(self, df_train, df_live, row_id_field=None):
@@ -402,6 +411,16 @@ class Concordia():
 
         # TODO: leverage the per-model row_id_field we will build out soon
         # TODO: some accounting for rows that don't match
+        cols_to_drop = ['_id', '_concordia_created_at']
+        for col in cols_to_drop:
+            try:
+                del df_train[col]
+            except:
+                pass
+            try:
+                del df_live[col]
+            except:
+                pass
         df = pd.merge(df_live, df_train, on='row_id', how='inner', suffixes=('_live', '_train'))
         return df
 
@@ -468,9 +487,6 @@ class Concordia():
 
         summary = self.summarize_prediction_deltas(df_deltas=deltas)
 
-        print('summary')
-        print(summary)
-
         return_val = self.create_analytics_return_val(summary=summary, deltas=deltas, matched_rows=df_live_and_train, return_summary=return_summary, return_deltas=return_deltas, return_matched_rows=return_matched_rows, verbose=verbose)
         return return_val
 
@@ -502,19 +518,20 @@ class Concordia():
     def find_missing_columns(self, df):
         columns = set(df.columns)
         results = {
-            'training_columns_not_in_live': []
+            'train_columns_not_in_live': []
             , 'live_columns_not_in_train': []
             , 'matched_cols': []
         }
 
         for col in df.columns:
-            if col[:-6] == '_train':
+            if col[-6:] == '_train':
+
                 live_col = col[:-6] + '_live'
                 if live_col not in columns:
-                    results['training_columns_not_in_live'].append(col[:-6])
+                    results['train_columns_not_in_live'].append(col[:-6])
                 else:
                     results['matched_cols'].append(col[:-6])
-            elif col[:-5] == '_live':
+            elif col[-5:] == '_live':
                 train_col = col[:-5] + '_train'
                 if train_col not in columns:
                     results['live_columns_not_in_train'].append(col[:-5])
@@ -557,11 +574,14 @@ class Concordia():
         return result
 
 
+
     def summarize_feature_deltas(self, df_deltas, feature_importances):
         col_results = []
 
         for col in df_deltas.columns:
+            # TODO: figure out if a column is categorical. if it is, handle deltas differently (probably just count of vals that are different)
             col_result = self.summarize_one_delta_col(deltas=df_deltas[col], prefix=col)
+            col_result['feature'] = col
             if feature_importances is not None:
                 importance = feature_importances.get(col, 0)
                 col_result['feature_importance'] = importance
@@ -570,7 +590,7 @@ class Concordia():
         return col_results
 
 
-    def analyze_feature_discrepancies(model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True):
+    def analyze_feature_discrepancies(self, model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True):
 
         # 1. Get live data (only after min_date)
         live_features = self.retrieve_from_persistent_db(val_type='live_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
@@ -581,9 +601,10 @@ class Concordia():
         training_features = pd.DataFrame(training_features)
 
         if ignore_duplicates == True:
-            print('Ignoring duplicates')
-            live_features.drop_duplicates(subset='row_id', inplace=True)
-            training_features.drop_duplicates(subset='row_id', inplace=True)
+            if live_features.duplicated(subset='row_id').any():
+                live_features.drop_duplicates(subset='row_id', inplace=True)
+            if training_features.duplicated(subset='row_id').any():
+                training_features.drop_duplicates(subset='row_id', inplace=True)
 
         # 3. match them up (and provide a reconciliation of what rows do not match)
         df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
@@ -595,16 +616,48 @@ class Concordia():
         column_comparison = self.find_missing_columns(df_live_and_train)
         matched_cols = column_comparison['matched_cols']
 
-        deltas = df_live_and_train.apply(lambda row: compare_one_row(row=row, features_to_compare=matched_cols), axis=1)
+
+
+        deltas = df_live_and_train.apply(lambda row: self.compare_one_row_features(row=row, features_to_compare=matched_cols), axis=1)
 
         model_info = self.retrieve_from_persistent_db(val_type='model_info', model_id=model_id)
-        feature_importances = model_info['feature_importances']
-        summary_list = self.summarize_feature_deltas(df_deltas=deltas)
-        summary_list = sorted(summary_list, key=lambda val: val['feature_importance'], ascending=False)
+        feature_importances = json.loads(model_info[0]['feature_importances'])
 
-        # TODO: figure out what to print, and what to return
-        # TODO: add feature_importance, and sort by it before printing
+        summary_list = self.summarize_feature_deltas(df_deltas=deltas, feature_importances=feature_importances)
 
+        if feature_importances is not None:
+            summary_list = sorted(summary_list, key=lambda val: val['feature_importance'], reverse=True)
+            printing_list = [val for val in summary_list if val['feature_importance'] > 0]
+        else:
+            printing_list = summary_list
+
+        if verbose == True:
+            printing_tuples = []
+            for feature in printing_list:
+                tup = []
+                name = feature['feature']
+
+                tup.append(name)
+                try:
+                    tup.append(feature['feature_importance'])
+                except KeyError:
+                    tup.append('n/a')
+
+                tup.append(feature['{}_num_rows_with_deltas'.format(name)])
+                tup.append(feature['{}_avg_delta'.format(name)])
+                tup.append(feature['{}_avg_abs_delta'.format(name)])
+                tup.append(feature['{}_95th_percentile_abs_delta'.format(name)])
+                try:
+                    feature_range = training_features[name].max() - training_features[name].min()
+                    tup.append(feature['{}_avg_abs_delta'.format(name)] / feature_range)
+                except TypeError:
+                    tup.append('n/a')
+                printing_tuples.append(tup)
+
+            print(tabulate(printing_tuples, headers=['Feature', 'Importance', 'Num rows with deltas', 'Avg delta', 'Avg abs delta', '95th pct avg abs delta', 'Avg abs delta / feature range'], floatfmt='.3f', tablefmt='psql'))
+
+        return_val = self.create_analytics_return_val(summary=summary_list, deltas=deltas, matched_rows=df_live_and_train, return_summary=return_summary, return_deltas=return_deltas, return_matched_rows=return_matched_rows, verbose=False)
+        return return_val
 
 
 
@@ -613,7 +666,21 @@ class Concordia():
         for feature in features_to_compare:
             train_val = row[feature + '_train']
             live_val = row[feature + '_live']
-            delta = train_val - live_val
+            try:
+                delta = train_val - live_val
+                if np.isnan(delta):
+                    if np.isnan(train_val) and np.isnan(live_val):
+                        delta = 0
+                    else:
+                        # TODO: figure out how we want to handle missing values.
+                        # This is the case where we have the column in both places
+                        # But, for this particular row, we have the value for that feature in only one of our train and live
+                        pass
+            except TypeError:
+                if str(train_val) != str(live_val):
+                    delta = 1
+                else:
+                    delta = 0
             result[feature] = delta
 
         return pd.Series(result)
