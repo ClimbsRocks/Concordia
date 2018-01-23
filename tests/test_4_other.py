@@ -127,4 +127,9 @@ def test_df_no_model_id_raises_error_always():
     assert False
 
 
+# def test_add_data_and_predictions_takes_in_dicts():
+#     # TODO: design a test for this. insert it, then try to retieve it after
+#     pass
+
+
 # def test_works_on_larger_datasets

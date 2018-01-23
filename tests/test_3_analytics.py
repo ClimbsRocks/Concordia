@@ -31,9 +31,6 @@ def do_setup():
     ml_predictor_titanic = load_ml_model(file_name)
     os.remove(file_name)
 
-    # row_ids = [i for i in range(df_titanic_test.shape[0])]
-    # df_titanic_test['row_id'] = row_ids
-
 
     persistent_db_config = {
         'db': '__concordia_test_env'
@@ -114,12 +111,6 @@ def test_compare_proba_predictions_finds_no_deltas_when_deltas_do_not_exist():
 
     train_preds = ml_predictor_titanic.predict_proba(df_titanic_test)
 
-    # modified_preds = []
-    # for pred in train_preds:
-    #     pred[0] = pred[0] - 0.1
-    #     pred[1] = pred[1] + 0.1
-    #     modified_preds.append(pred)
-
     concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=train_preds, row_ids=df_titanic_test.name, actuals=df_titanic_test.survived)
 
     results = concord.analyze_prediction_discrepancies(model_id=model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True)
@@ -164,12 +155,6 @@ def test_compare_predict_predictions_finds_no_deltas_when_deltas_do_not_exist():
     concord.predict(model_id, df_titanic_test)
 
     train_preds = ml_predictor_titanic.predict(df_titanic_test)
-
-    # modified_preds = []
-    # for pred in train_preds:
-    #     pred[0] = pred[0] - 0.1
-    #     pred[1] = pred[1] + 0.1
-    #     modified_preds.append(pred)
 
     concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=train_preds, row_ids=df_titanic_test.name, actuals=df_titanic_test.survived)
 
