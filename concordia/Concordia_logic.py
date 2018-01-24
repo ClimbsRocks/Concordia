@@ -590,7 +590,7 @@ class Concordia():
         return col_results
 
 
-    def analyze_feature_discrepancies(self, model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True):
+    def analyze_feature_discrepancies(self, model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True, sample_rate=1.0):
 
         # 1. Get live data (only after min_date)
         live_features = self.retrieve_from_persistent_db(val_type='live_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
@@ -606,8 +606,11 @@ class Concordia():
             if training_features.duplicated(subset='row_id').any():
                 training_features.drop_duplicates(subset='row_id', inplace=True)
 
+
         # 3. match them up (and provide a reconciliation of what rows do not match)
         df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
+
+        df_live_and_train.sample(frac=sample_rate, inplace=True)
         # All of the above should be done using helper functions
         # 4. Go through and analyze all feature discrepancies!
             # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
@@ -616,6 +619,12 @@ class Concordia():
 
         model_info = self.retrieve_from_persistent_db(val_type='model_info', model_id=model_id)
         feature_importances = json.loads(model_info[0]['feature_importances'])
+        if isinstance(feature_importances, str):
+            feature_importances = json.loads(feature_importances)
+        print('feature_importances')
+        print(feature_importances)
+        print('type(feature_importances)')
+        print(type(feature_importances))
 
         column_comparison = self.find_missing_columns(df_live_and_train)
         matched_cols = column_comparison['matched_cols']
@@ -624,6 +633,11 @@ class Concordia():
         if feature_importances is not None:
             important_cols = []
             for feature in matched_cols:
+                print('feature_importances')
+                print(feature_importances)
+                print('type(feature_importances)')
+                print(type(feature_importances))
+
                 if feature_importances.get(feature, 0) > 0:
                     important_cols.append(feature)
 
