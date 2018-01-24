@@ -613,15 +613,25 @@ class Concordia():
             # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
         # TODO: find columns missing from only one (train or live)
         # TODO: find rows missing frm only one (train or live)
-        column_comparison = self.find_missing_columns(df_live_and_train)
-        matched_cols = column_comparison['matched_cols']
-
-
-
-        deltas = df_live_and_train.apply(lambda row: self.compare_one_row_features(row=row, features_to_compare=matched_cols), axis=1)
 
         model_info = self.retrieve_from_persistent_db(val_type='model_info', model_id=model_id)
         feature_importances = json.loads(model_info[0]['feature_importances'])
+
+        column_comparison = self.find_missing_columns(df_live_and_train)
+        matched_cols = column_comparison['matched_cols']
+
+        important_cols = matched_cols
+        if feature_importances is not None:
+            important_cols = []
+            for feature in matched_cols:
+                if feature_importances.get(feature, 0) > 0:
+                    important_cols.append(feature)
+
+
+
+
+        deltas = df_live_and_train.apply(lambda row: self.compare_one_row_features(row=row, features_to_compare=important_cols), axis=1)
+
 
         summary_list = self.summarize_feature_deltas(df_deltas=deltas, feature_importances=feature_importances)
 
