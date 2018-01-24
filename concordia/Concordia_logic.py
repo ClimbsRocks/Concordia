@@ -610,7 +610,7 @@ class Concordia():
         # 3. match them up (and provide a reconciliation of what rows do not match)
         df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
 
-        df_live_and_train.sample(frac=sample_rate, inplace=True)
+        df_live_and_train = df_live_and_train.sample(frac=sample_rate)
         # All of the above should be done using helper functions
         # 4. Go through and analyze all feature discrepancies!
             # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
@@ -621,10 +621,6 @@ class Concordia():
         feature_importances = json.loads(model_info[0]['feature_importances'])
         if isinstance(feature_importances, str):
             feature_importances = json.loads(feature_importances)
-        print('feature_importances')
-        print(feature_importances)
-        print('type(feature_importances)')
-        print(type(feature_importances))
 
         column_comparison = self.find_missing_columns(df_live_and_train)
         matched_cols = column_comparison['matched_cols']
@@ -633,15 +629,8 @@ class Concordia():
         if feature_importances is not None:
             important_cols = []
             for feature in matched_cols:
-                print('feature_importances')
-                print(feature_importances)
-                print('type(feature_importances)')
-                print(type(feature_importances))
-
                 if feature_importances.get(feature, 0) > 0:
                     important_cols.append(feature)
-
-
 
 
         deltas = df_live_and_train.apply(lambda row: self.compare_one_row_features(row=row, features_to_compare=important_cols), axis=1)
@@ -678,6 +667,7 @@ class Concordia():
                     tup.append('n/a')
                 printing_tuples.append(tup)
 
+            print('Feature discrepancy results')
             print(tabulate(printing_tuples, headers=['Feature', 'Importance', 'Num rows with deltas', 'Avg delta', 'Avg abs delta', '95th pct avg abs delta', 'Avg abs delta / feature range'], floatfmt='.3f', tablefmt='psql'))
 
         return_val = self.create_analytics_return_val(summary=summary_list, deltas=deltas, matched_rows=df_live_and_train, return_summary=return_summary, return_deltas=return_deltas, return_matched_rows=return_matched_rows, verbose=False)
