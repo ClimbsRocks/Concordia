@@ -668,7 +668,7 @@ class Concordia():
                 printing_tuples.append(tup)
 
             print('Feature discrepancy results')
-            print(tabulate(printing_tuples, headers=['Feature', 'Importance', 'Num rows with deltas', 'Avg delta', 'Avg abs delta', '95th pct avg abs delta', 'Avg abs delta / feature range'], floatfmt='.3f', tablefmt='psql'))
+            print(tabulate(printing_tuples, headers=['Feature', 'Importance', 'Num deltas', 'Avg delta', 'Avg abs delta', '95th pct abs delta', 'Avg abs delta/range'], floatfmt='.3f', tablefmt='psql'))
 
         return_val = self.create_analytics_return_val(summary=summary_list, deltas=deltas, matched_rows=df_live_and_train, return_summary=return_summary, return_deltas=return_deltas, return_matched_rows=return_matched_rows, verbose=False)
         return return_val
