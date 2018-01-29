@@ -277,8 +277,24 @@ def test_compare_features_finds_deltas_when_deltas_do_exist():
             assert prediction_delta_val == -delta_val
 
 
+def test_raises_warning_when_it_appears_row_id_types_mismatch():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=ml_predictor_titanic.feature_importances_)
+
+    concord.predict(model_id, df_titanic_test)
+
+    df_titanic_test['name'] = df_titanic_test.name.apply(lambda val: '{}_{}'.format(val, random.random()))
+    train_preds = ml_predictor_titanic.predict(df_titanic_test)
+
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=train_preds, row_ids=df_titanic_test.name, actuals=df_titanic_test.survived)
 
 
+    with warnings.catch_warnings(record=True) as w:
+        results = concord.analyze_prediction_discrepancies(model_id=model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_duplicates=True)
+        assert len(w) == 1
+
+    assert results['deltas'].shape[0] == 0
 
 
 
