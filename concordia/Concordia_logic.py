@@ -134,6 +134,12 @@ class Concordia():
 
 
     def retrieve_from_persistent_db(self, val_type, row_id=None, model_id=None, min_date=None, date_field=None):
+        if min_date is not None and date_field is None and not (isinstance(min_date, datetime.datetime) or isinstance(min_date, datetime.date)):
+            print('You have specified a min_date, but not a date_field')
+            print('Without the date_field specified, Concordia will query against the "_concordia_created_at" field, which is of type datetime.datetime.')
+            print('Therefore, your min_date must be of type datetime.datetime, but it is not right now. It is of type: '.format(type(min_date)))
+            raise(TypeError('min_date must be of type datetime if date_field is unspecified'))
+
         query_params = {
             'row_id': row_id
             , 'model_id': model_id
