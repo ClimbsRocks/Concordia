@@ -297,4 +297,20 @@ def test_raises_warning_when_it_appears_row_id_types_mismatch():
     assert results['deltas'].shape[0] == 0
 
 
+@raises(TypeError)
+def test_raises_error_when_date_is_specified_without_datefield_but_min_date_is_not_datetime():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=ml_predictor_titanic.feature_importances_)
+
+    concord.predict(model_id, df_titanic_test)
+
+    train_preds = ml_predictor_titanic.predict(df_titanic_test)
+
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=train_preds, row_ids=df_titanic_test.name, actuals=df_titanic_test.survived)
+
+
+    results = concord.analyze_prediction_discrepancies(model_id=model_id, min_date='12345', date_field=None)
+
+    assert False
 
