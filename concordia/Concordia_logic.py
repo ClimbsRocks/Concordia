@@ -421,7 +421,21 @@ class Concordia():
                 del df_live[col]
             except:
                 pass
+
         df = pd.merge(df_live, df_train, on='row_id', how='inner', suffixes=('_live', '_train'))
+
+        if df.shape[0] == 0 and df_train.shape[0] > 0 and df_live.shape[0] > 0:
+            print('\nWe have saved data for both training and live environments, but were not able to match them together on shared row_id values. Here is some information about the row_id column to help you debug.')
+            print('\nTraining row_id.head')
+            print(df_train.row_id.head())
+            print('\nLive row_id.head')
+            print(df_live.row_id.head())
+            print('\nTraining row_id described:')
+            print(df_train.row_id.describe())
+            print('\nLive row_id described:')
+            print(df_live.row_id.describe())
+
+            warnings.warn('While we have saved data for this model_id for both live and training environments, we were not able to match them on the same row_id.')
         return df
 
 
@@ -456,6 +470,8 @@ class Concordia():
 
 
     def analyze_prediction_discrepancies(self, model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_nans=True, ignore_duplicates=True):
+        # TODO 1: add input checking for min_date must be a datetime if date_field is none
+        # TODO 2: add logging if we have values for both training and live, but no matches when merging
 
         # 1. Get live data (only after min_date)
         live_predictions = self.retrieve_from_persistent_db(val_type='live_predictions', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
@@ -464,6 +480,9 @@ class Concordia():
 
         live_predictions = pd.DataFrame(live_predictions)
         training_predictions = pd.DataFrame(training_predictions)
+
+        print('Found {} relevant live predictions'.format(live_predictions.shape[0]))
+        print('Found a max of {} possibly relevant train predictions'.format(training_predictions.shape[0]))
 
         if ignore_nans == True:
             print('Ignoring nans')
@@ -479,6 +498,8 @@ class Concordia():
 
 
         df_live_and_train = self.match_training_and_live(df_live=live_predictions, df_train=training_predictions)
+
+        print('Found {} rows that appeared in both our training and live datasets'.format(df_live_and_train.shape[0]))
         # All of the above should be done using helper functions
         # 4. Go through and analyze all feature discrepancies!
             # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
