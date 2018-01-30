@@ -1,4 +1,6 @@
+import json
 import os
+import random
 import sys
 import warnings
 
@@ -6,6 +8,7 @@ from auto_ml.utils_models import load_ml_model
 import dill
 from nose.tools import raises
 import numpy as np
+import pandas as pd
 from pymongo import MongoClient
 
 sys.path = [os.path.abspath(os.path.dirname(__file__))] + sys.path
@@ -357,22 +360,155 @@ def test_no_row_id_throws_error_when_missing_default_field():
     assert False
 
 
-# def test_list_all_models_returns_useful_info():
-#     model_descriptions = concord.list_all_models()
+def test_add_new_model_with_features_to_save():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
 
-#     assert len(model_descriptions) == 1
+    redis_key_features = concord.make_redis_key_features(model_id)
+    starting_val = rdb.get(redis_key_features)
 
-#     assert isinstance(model_descriptions[0], dict)
-#     expected_fields = ['namespace', 'val_type', 'train_or_serve', 'row_id', 'model', 'model_id', 'feature_names', 'feature_importances', 'description', 'date_added', 'num_predictions', 'last_prediction_time']
-#     for field in expected_fields:
-#         assert field in model_descriptions[0]
+    assert starting_val is None
+
+    importances_dict = ml_predictor_titanic.feature_importances_
+
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=importances_dict)
+
+    post_insert_val = rdb.get(redis_key_features)
+    assert post_insert_val is not None
+    assert post_insert_val == json.dumps('all')
 
 
-# def test_list_all_models_raises_warning_before_models_have_been_added_and_returns_empty_list():
-#     with warnings.catch_warnings(record=True) as w:
 
-#         model_descriptions = concord.list_all_models()
-#         print('we should be throwing a warning for the user to give them useful feedback')
-#         assert len(w) == 1
-#     assert isinstance(model_descriptions, list)
-#     assert len(model_descriptions) == 0
+def test_get_features_to_save():
+    features = concord._get_features_to_save(model_id)
+    print(type(features))
+    assert type(features) == str or type(features) == unicode
+
+
+def test_get_model_after_deleting_from_redis():
+    rdb.delete(concord.make_redis_key_features(model_id))
+    features = concord._get_features_to_save(model_id)
+    print(type(features))
+    assert type(features) == str or type(features) == unicode
+
+
+
+
+def test_add_model_uses_all_features_when_features_to_save_is_not_provided():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    redis_key_model = concord.make_redis_model_key(model_id)
+    starting_val = rdb.get(redis_key_model)
+
+    assert starting_val is None
+
+    importances_dict = ml_predictor_titanic.feature_importances_
+
+    # features_to_save = ['name', 'age', 'sibsp']
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=None)
+    concord.predict_proba(model_id=model_id, features=df_titanic_test)
+    saved_features = concord.retrieve_from_persistent_db(val_type='live_features', model_id=model_id)
+    saved_features = pd.DataFrame(saved_features)
+    print('saved_features')
+    print(saved_features)
+    print('saved_features.columns')
+    print(saved_features.columns)
+    expected_cols = ['age', 'embarked', 'fare', 'model_id', 'name', 'parch', 'pclass', 'row_id', 'sex', 'sibsp']
+
+    for col in expected_cols:
+        assert col in saved_features.columns
+
+
+def test_add_model_uses_only_relevant_features_when_features_to_save_is_provided():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    redis_key_model = concord.make_redis_model_key(model_id)
+    starting_val = rdb.get(redis_key_model)
+
+    assert starting_val is None
+
+    importances_dict = ml_predictor_titanic.feature_importances_
+
+    features_to_save = ['name', 'age', 'sibsp', 'embarked', 'fare']
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=None, features_to_save=features_to_save)
+
+    concord.predict_proba(model_id=model_id, features=df_titanic_test)
+    saved_features = concord.retrieve_from_persistent_db(val_type='live_features', model_id=model_id)
+    saved_features = pd.DataFrame(saved_features)
+
+    expected_cols = features_to_save + ['model_id', 'row_id', '_concordia_created_at', '_id']
+
+    for col in features_to_save:
+        assert col in saved_features.columns
+
+    for col in saved_features:
+        print(col)
+        assert col in expected_cols
+
+
+
+def test_add_model_train_uses_all_features_when_features_to_save_is_not_provided():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    redis_key_model = concord.make_redis_model_key(model_id)
+    starting_val = rdb.get(redis_key_model)
+
+    assert starting_val is None
+
+    importances_dict = ml_predictor_titanic.feature_importances_
+
+    # features_to_save = ['name', 'age', 'sibsp']
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, feature_importances=None)
+    predictions = ml_predictor_titanic.predict_proba(df_titanic_test)
+
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=predictions, row_ids=df_titanic_test['name'])
+    saved_features = concord.retrieve_from_persistent_db(val_type='training_features', model_id=model_id)
+    saved_features = pd.DataFrame(saved_features)
+
+    print('saved_features')
+    print(saved_features)
+    print('saved_features.columns')
+    print(saved_features.columns)
+    expected_cols = ['age', 'embarked', 'fare', 'model_id', 'name', 'parch', 'pclass', 'row_id', 'sex', 'sibsp']
+
+    for col in expected_cols:
+        assert col in saved_features.columns
+
+
+def test_add_model_train_uses_only_relevant_features_when_features_to_save_is_provided():
+    model_id = 'ml_predictor_titanic_{}'.format(random.random())
+
+    redis_key_model = concord.make_redis_model_key(model_id)
+    starting_val = rdb.get(redis_key_model)
+
+    assert starting_val is None
+
+    importances_dict = ml_predictor_titanic.feature_importances_
+
+    features_to_save = ['name', 'age', 'sibsp', 'embarked', 'fare']
+    concord.add_model(model=ml_predictor_titanic, model_id=model_id, features_to_save=features_to_save)
+    predictions = ml_predictor_titanic.predict_proba(df_titanic_test)
+
+    concord.add_data_and_predictions(model_id=model_id, features=df_titanic_test, predictions=predictions, row_ids=df_titanic_test['name'])
+    saved_features = concord.retrieve_from_persistent_db(val_type='training_features', model_id=model_id)
+    saved_features = pd.DataFrame(saved_features)
+
+
+    expected_cols = features_to_save + ['model_id', 'row_id', '_concordia_created_at', '_id']
+
+    for col in features_to_save:
+        assert col in saved_features.columns
+
+    for col in saved_features:
+        print(col)
+        assert col in expected_cols
+
+@raises(TypeError)
+def test_add_features_fails_for_anything_but_df():
+    features = df_titanic_test.iloc[0].to_dict()
+    concord.add_data_and_predictions(model_id=model_id, features=features, predictions=[0.25, 0.75], row_ids=features['name'])
+
+@raises(TypeError)
+def test_add_features_fails_for_anything_but_df():
+    features = df_titanic_test.iloc[0].to_dict()
+    concord.add_data_and_predictions(model_id=model_id, features=[features], predictions=[0.25, 0.75], row_ids=features['name'])
+
