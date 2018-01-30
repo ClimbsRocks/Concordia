@@ -73,19 +73,17 @@ class Concordia():
 
 
     # feature_importances is a dict, with keys as feature names, and values being the importance of each feature. it doesn't matter how the imoprtances are calculated, we'll just sort by those values
-    def add_model(self, model, model_id, feature_names=None, feature_importances=None, description=None):
-        # # FUTURE: allow the user to not use a row_id_field and just track live predictions. we will likely add in our own prediction_id field
-        # if row_id_field is None:
-        #     raise(ValueError('row_id_field is required. It specifies which feature is going to be unique for each row. row_id_field enables us to compare features between training and serving environments.'))
+    def add_model(self, model, model_id, feature_names=None, feature_importances=None, description=None, features_to_save='all'):
         print('One thing to keep in mind is that each model_id must be unique in each db configuration. So if two Concordia instances are using the same database configurations, you should make sure their model_ids do not overlap.')
-        # TODO: warn the user if that key exists already
-        # maybe even take in errors='raise', but let the user pass in 'ignore' and 'warn' instead
 
         redis_key_model = self.make_redis_model_key(model_id)
         stringified_model = codecs.encode(dill.dumps(model), 'base64').decode()
         self.rdb.set(redis_key_model, stringified_model)
 
-        # TODO: get feature names automatically if possible
+        redis_key_features = self.make_redis_key_features(model_id)
+        stringified_features = json.dumps(features_to_save)
+        self.rdb.set(redis_key_features, stringified_features)
+
         if feature_importances is not None:
             if not isinstance(feature_importances, dict):
                 raise(TypeError('feature_importances must be a dict, where each key is a feature name, and each value is the importance of that feature'))
@@ -102,7 +100,9 @@ class Concordia():
             , 'feature_importances': json.dumps(feature_importances)
             , 'description': description
             , 'date_added': datetime.datetime.now()
+            , 'features_to_save': stringified_features
         }
+
         self.insert_into_persistent_db(mdb_doc, val_type=mdb_doc['val_type'], row_id=mdb_doc['model_id'], model_id=mdb_doc['model_id'])
 
         return self
@@ -295,52 +295,88 @@ class Concordia():
         return redis_result
 
 
+    def _get_features_to_save(self, model_id):
+        redis_key = self.make_redis_key_features(model_id)
+        redis_result = self.rdb.get(redis_key)
+        if redis_result is None or redis_result is 'None':
+            mdb_result = self.retrieve_from_persistent_db(val_type='model_info', row_id=None, model_id=model_id)
+            if mdb_result is None or len(mdb_result) == 0:
+                return 'all'
+            else:
+                features = mdb_result[0]['features_to_save']
+                self.rdb.set(redis_key, features)
+                redis_result = self.rdb.get(redis_key)
+
+        redis_result = json.loads(redis_result)
+        return redis_result
+
+
+    def make_redis_key_features(self, model_id):
+        return '_concordia_{}_{}'.format(model_id, 'features_to_save')
+
+
     # This can handle both individual dictionaries and Pandas DataFrames as inputs
-    def add_data_and_predictions(self, model_id, features, predictions, row_ids, actuals=None, model_type=None):
+    def add_data_and_predictions(self, model_id, features, predictions, row_ids, actuals=None):
+        if not isinstance(features, pd.DataFrame):
+            print('Training features must be a pandas DataFrame, not a {}'.format(type(features)))
+            raise(TypeError('Training features must be a pandas DataFrame'))
 
         features = features.copy()
 
         features['row_id'] = row_ids
         features['model_id'] = model_id
-        features['model_type'] = model_type
+        features_to_save = self._get_features_to_save(model_id=model_id)
+        concordia_features_to_save = ['row_id', 'model_id']
 
-        if isinstance(features, pd.DataFrame):
-            prediction_docs = []
-            for idx, pred in enumerate(predictions):
-                if type(pred) not in self.valid_prediction_types:
-                    pred = list(pred)
-                pred_doc = {
-                    'prediction': pred
+        if features_to_save == 'all':
+            features_to_save = list(features.columns)
+        else:
+            features_to_save = features_to_save + concordia_features_to_save
+        prediction_docs = []
+        for idx, pred in enumerate(predictions):
+            if type(pred) not in self.valid_prediction_types:
+                pred = list(pred)
+            pred_doc = {
+                'prediction': pred
+                , 'row_id': row_ids.iloc[idx]
+                , 'model_id': model_id
+            }
+            prediction_docs.append(pred_doc)
+        predictions_df = pd.DataFrame(prediction_docs)
+
+        if actuals is not None:
+            actuals_docs = []
+            for idx, actual in enumerate(actuals):
+                actual_doc = {
+                    'label': actual
                     , 'row_id': row_ids.iloc[idx]
                     , 'model_id': model_id
                 }
-                prediction_docs.append(pred_doc)
-            predictions_df = pd.DataFrame(prediction_docs)
+                actuals_docs.append(actual_doc)
+            actuals_df = pd.DataFrame(actuals_docs)
 
-            if actuals is not None:
-                actuals_docs = []
-                for idx, actual in enumerate(actuals):
-                    actual_doc = {
-                        'label': actual
-                        , 'row_id': row_ids.iloc[idx]
-                        , 'model_id': model_id
-                    }
-                    actuals_docs.append(actual_doc)
-                actuals_df = pd.DataFrame(actuals_docs)
+        saving_features = features[features_to_save]
+        print('saving_features')
+        print(saving_features)
+        self.insert_into_persistent_db(val=saving_features, val_type='training_features')
 
+        self.insert_into_persistent_db(val=predictions_df, val_type='training_predictions')
 
-            self.insert_into_persistent_db(val=features, val_type='training_features')
+        if actuals is not None:
+            self.insert_into_persistent_db(val=actuals_df, val_type='training_labels')
 
-            self.insert_into_persistent_db(val=predictions_df, val_type='training_predictions')
-
-            if actuals is not None:
-                self.insert_into_persistent_db(val=actuals_df, val_type='training_labels')
-
-        elif isinstance(features, dict):
-            self.insert_into_persistent_db(val=features, val_type='training_features', row_id=row_id, model_id=model_id)
-            self.insert_into_persistent_db(val=predictions, val_type='training_predictions', row_id=row_id, model_id=model_id)
-            if actuals is not None:
-                self.insert_into_persistent_db(val=actuals, val_type='training_labels', row_id=row_id, model_id=model_id)
+        #     if features_to_save == 'all':
+        #         features_to_save = features.keys()
+        #     else:
+        #         features_to_save = features_to_save + concordia_features_to_save
+        #     saving_features = {}
+        #     for k, v in features.items():
+        #         if k in features_to_save:
+        #             saving_features[k] = v
+        #     self.insert_into_persistent_db(val=saving_features, val_type='training_features', row_id=row_id, model_id=model_id)
+        #     self.insert_into_persistent_db(val=predictions, val_type='training_predictions', row_id=row_id, model_id=model_id)
+        #     if actuals is not None:
+        #         self.insert_into_persistent_db(val=actuals, val_type='training_labels', row_id=row_id, model_id=model_id)
 
         return self
 
@@ -370,8 +406,14 @@ class Concordia():
 
         if row_id is None:
             row_id = features[self.default_row_id_field]
+
+        features_to_save = self._get_features_to_save(model_id=model_id)
+        if features_to_save == 'all':
+            saving_features = features
+        else:
+            saving_features = features[features_to_save]
         # FUTURE: input verification here before we get predictions.
-        self.insert_into_persistent_db(val=features, val_type='live_features', row_id=row_id, model_id=model_id)
+        self.insert_into_persistent_db(val=saving_features, val_type='live_features', row_id=row_id, model_id=model_id)
 
 
         if proba == True:
