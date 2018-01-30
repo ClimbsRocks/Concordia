@@ -374,7 +374,7 @@ def test_add_new_model_with_features_to_save():
 
     post_insert_val = rdb.get(redis_key_features)
     assert post_insert_val is not None
-    assert post_insert_val == json.dumps('all')
+    assert str(post_insert_val) == json.dumps('all')
 
 
 
