@@ -80,9 +80,30 @@ concord.analyze_feature_discrepancies(model_id='model123')
 Concordia relies on MongoDB and Redis. These can be either local, or in the cloud. You can specify DB credentials and connection options when creating and loading Concordia.
 
 
-## Advanced Options
+## Database Configuration
 
+You can easily specify your own DB connection. You'll need to do this both when creating the Concordia instance in the first place, as well as when you `load_concordia()` to get access to that same Concordia instance later.
 
+```
+
+persistent_db_config = {
+    'db': '__concordia_test_env'
+    , 'host': 'localhost'
+    , 'port': 27017
+}
+
+in_memory_db_config = {
+    'db': 8
+    , 'host': 'localhost'
+    , 'port': 6379
+}
+
+concord = Concordia(in_memory_db_config=in_memory_db_config, persistent_db_config=persistent_db_config)
+
+# To load this instance of Concordia later, you can pass in that same persistent_db_config when invoking load_concordia
+concord = load_concordia(persistent_db_config=persistent_db_config)
+
+```
 
 
 
