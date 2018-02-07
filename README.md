@@ -12,18 +12,19 @@ Concordia is a part of a suite of open-source machine learning packages that all
 
 ## Description
 
+Concordia is a tracking and analytics tool for machine learning models running in production.
+
 Using Concordia, you should be able to rapidly have confidence in your shipped ML models.
 
-If everything's working as expected, you should be able to see that, and heave a sigh of relief.
+If everything's working as expected, you should have quick proof that you're in a position to scale up this model.
 
-If things are not going according to plan, again, you should be able to see that rapidly, and nearly as quickly see the root cause of those discrepancies.
-
-It's designed to work across environments, with many critical parameters configurable (such as database settings).
+If things are not going according to plan, you should be able to see that rapidly, and have a suite of information to hone in on the root cause of those discrepancies.
 
 
 ## Basic Setup
 
 ```
+
 from concordia import Concordia
 concord = Concordia()
 
@@ -40,18 +41,21 @@ concord.add_model(model=model, model_id='model123')
 The goal here is to save the features and predictions as you calcate them in your training environment. Then, we can compare these to the features and predictions coming from your live environment. We use the row_ids to match rows across the two environments.
 
 ```
+
 df = load_my_data()
 ml_predictor = train_ml_model()
 
 predictions = ml_predictor.predict(df)
 
 concord.add_data_and_predictions(model_id='model123', features=df, predictions=predictions, row_ids=df['my_row_identifier'])
+
 ```
 
 
 #### In your live environment
 
 ```
+
 from concordia import load_concordia
 concord = load_concordia()
 
@@ -65,6 +69,7 @@ prediction = concord.predict(model_id='model123', features=data, row_id=data['my
 #### In your analytics environment
 
 ```
+
 from Concordia import load_concordia
 concord = load_concordia()
 
@@ -100,39 +105,16 @@ in_memory_db_config = {
 
 concord = Concordia(in_memory_db_config=in_memory_db_config, persistent_db_config=persistent_db_config)
 
-# To load this instance of Concordia later, you can pass in that same persistent_db_config when invoking load_concordia
+# To load this instance of Concordia later, use that same persistent_db_config
 concord = load_concordia(persistent_db_config=persistent_db_config)
 
 ```
 
 
+## What does Concordia do, under the hood?
 
-
-
-
-
-
-## Fully contained example
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- It ensures a consistent db schema
+- It ensures a consistent way of saving data (predictions and features), so that data can be matched up and compared later
+- It builds in a suite of analytics tools for analyzing discrepancies
+- All of this happens automatically for each model that you ship
 
