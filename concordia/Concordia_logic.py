@@ -298,15 +298,21 @@ class Concordia():
     def _get_features_to_save(self, model_id):
         redis_key = self.make_redis_key_features(model_id)
         redis_result = self.rdb.get(redis_key)
+
         if redis_result is None or redis_result is 'None':
             mdb_result = self.retrieve_from_persistent_db(val_type='model_info', row_id=None, model_id=model_id)
             if mdb_result is None or len(mdb_result) == 0:
                 return 'all'
             else:
-                features = mdb_result[0]['features_to_save']
+                try:
+                    features = mdb_result[0]['features_to_save']
+                except KeyError:
+                    features = json.dumps('all')
                 self.rdb.set(redis_key, features)
                 redis_result = self.rdb.get(redis_key)
 
+        if isinstance(redis_result, bytes):
+            redis_result = redis_result.decode('utf-8')
         redis_result = json.loads(redis_result)
         return redis_result
 
@@ -356,8 +362,6 @@ class Concordia():
             actuals_df = pd.DataFrame(actuals_docs)
 
         saving_features = features[features_to_save]
-        print('saving_features')
-        print(saving_features)
         self.insert_into_persistent_db(val=saving_features, val_type='training_features')
 
         self.insert_into_persistent_db(val=predictions_df, val_type='training_predictions')
@@ -529,19 +533,22 @@ class Concordia():
         live_predictions = pd.DataFrame(live_predictions)
         training_predictions = pd.DataFrame(training_predictions)
 
-        print('Found {} relevant live predictions'.format(live_predictions.shape[0]))
-        print('Found a max of {} possibly relevant train predictions'.format(training_predictions.shape[0]))
 
         if ignore_nans == True:
-            print('Ignoring nans')
+            if verbose:
+                print('Ignoring nans')
             live_predictions = live_predictions[pd.notnull(live_predictions.prediction)]
             training_predictions = training_predictions[pd.notnull(training_predictions.prediction)]
 
         if ignore_duplicates == True:
-            print('Ignoring duplicates')
+            if verbose:
+                print('Ignoring duplicates')
             live_predictions.drop_duplicates(subset='row_id', inplace=True)
             training_predictions.drop_duplicates(subset='row_id', inplace=True)
 
+        if verbose == True:
+            print('Found {} relevant live predictions'.format(live_predictions.shape[0]))
+            print('Found a max of {} possibly relevant train predictions'.format(training_predictions.shape[0]))
         # 3. match them up (and provide a reconciliation of what rows do not match)
 
 
@@ -612,7 +619,7 @@ class Concordia():
 
         results = {}
 
-        percentiles = [5, 25, 50, 75, 95]
+        percentiles = [5, 25, 50, 75, 95, 99]
 
         results['{}_num_rows_with_deltas'.format(prefix)] = len([x for x in deltas if x != 0])
         results['{}_num_rows_with_no_deltas'.format(prefix)] = len([x for x in deltas if x == 0])
@@ -670,10 +677,12 @@ class Concordia():
         training_features = pd.DataFrame(training_features)
 
         if ignore_duplicates == True:
-            if live_features.duplicated(subset='row_id').any():
+            if len(set(live_features['row_id'])) < live_features.shape[0]:
                 live_features.drop_duplicates(subset='row_id', inplace=True)
-            if training_features.duplicated(subset='row_id').any():
-                training_features.drop_duplicates(subset='row_id', inplace=True)
+            if len(set(training_features['row_id'])) < training_features.shape[0]:
+                # Keep the most recently added features
+                training_features.sort_values(by='_concordia_created_at', ascending=True, inplace=True)
+                training_features.drop_duplicates(subset='row_id', inplace=True, keep='last')
 
         # 3. match them up (and provide a reconciliation of what rows do not match)
         df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
@@ -685,8 +694,6 @@ class Concordia():
         column_comparison = self.find_missing_columns(df_live_and_train)
         matched_cols = column_comparison['matched_cols']
 
-
-
         deltas = df_live_and_train.apply(lambda row: self.compare_one_row_features(row=row, features_to_compare=matched_cols), axis=1)
 
         model_info = self.retrieve_from_persistent_db(val_type='model_info', model_id=model_id)
@@ -695,8 +702,8 @@ class Concordia():
         summary_list = self.summarize_feature_deltas(df_deltas=deltas, feature_importances=feature_importances)
 
         if feature_importances is not None:
-            summary_list = sorted(summary_list, key=lambda val: val['feature_importance'], reverse=True)
-            printing_list = [val for val in summary_list if val['feature_importance'] > 0]
+            printing_list = sorted(summary_list, key=lambda val: val['feature_importance'], reverse=True)
+            printing_list = [val for val in printing_list if val['feature_importance'] > 0]
         else:
             printing_list = summary_list
 
