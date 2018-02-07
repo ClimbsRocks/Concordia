@@ -374,7 +374,10 @@ def test_add_new_model_with_features_to_save():
 
     post_insert_val = rdb.get(redis_key_features)
     assert post_insert_val is not None
-    assert str(post_insert_val, 'utf-8') == json.dumps('all')
+    try:
+        assert str(post_insert_val) == json.dumps('all')
+    except:
+        assert str(post_insert_val, 'utf-8') == json.dumps('all')
 
 
 
@@ -389,8 +392,6 @@ def test_get_model_after_deleting_from_redis():
     features = concord._get_features_to_save(model_id)
     print(type(features))
     assert type(features) == str or type(features) == unicode
-
-
 
 
 def test_add_model_uses_all_features_when_features_to_save_is_not_provided():
