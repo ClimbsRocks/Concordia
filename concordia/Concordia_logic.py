@@ -73,19 +73,17 @@ class Concordia():
 
 
     # feature_importances is a dict, with keys as feature names, and values being the importance of each feature. it doesn't matter how the imoprtances are calculated, we'll just sort by those values
-    def add_model(self, model, model_id, feature_names=None, feature_importances=None, description=None):
-        # # FUTURE: allow the user to not use a row_id_field and just track live predictions. we will likely add in our own prediction_id field
-        # if row_id_field is None:
-        #     raise(ValueError('row_id_field is required. It specifies which feature is going to be unique for each row. row_id_field enables us to compare features between training and serving environments.'))
+    def add_model(self, model, model_id, feature_names=None, feature_importances=None, description=None, features_to_save='all'):
         print('One thing to keep in mind is that each model_id must be unique in each db configuration. So if two Concordia instances are using the same database configurations, you should make sure their model_ids do not overlap.')
-        # TODO: warn the user if that key exists already
-        # maybe even take in errors='raise', but let the user pass in 'ignore' and 'warn' instead
 
         redis_key_model = self.make_redis_model_key(model_id)
         stringified_model = codecs.encode(dill.dumps(model), 'base64').decode()
         self.rdb.set(redis_key_model, stringified_model)
 
-        # TODO: get feature names automatically if possible
+        redis_key_features = self.make_redis_key_features(model_id)
+        stringified_features = json.dumps(features_to_save)
+        self.rdb.set(redis_key_features, stringified_features)
+
         if feature_importances is not None:
             if not isinstance(feature_importances, dict):
                 raise(TypeError('feature_importances must be a dict, where each key is a feature name, and each value is the importance of that feature'))
@@ -102,7 +100,9 @@ class Concordia():
             , 'feature_importances': json.dumps(feature_importances)
             , 'description': description
             , 'date_added': datetime.datetime.now()
+            , 'features_to_save': stringified_features
         }
+
         self.insert_into_persistent_db(mdb_doc, val_type=mdb_doc['val_type'], row_id=mdb_doc['model_id'], model_id=mdb_doc['model_id'])
 
         return self
@@ -134,6 +134,12 @@ class Concordia():
 
 
     def retrieve_from_persistent_db(self, val_type, row_id=None, model_id=None, min_date=None, date_field=None):
+        if min_date is not None and date_field is None and not (isinstance(min_date, datetime.datetime) or isinstance(min_date, datetime.date)):
+            print('You have specified a min_date, but not a date_field')
+            print('Without the date_field specified, Concordia will query against the "_concordia_created_at" field, which is of type datetime.datetime.')
+            print('Therefore, your min_date must be of type datetime.datetime, but it is not right now. It is of type: '.format(type(min_date)))
+            raise(TypeError('min_date must be of type datetime if date_field is unspecified'))
+
         query_params = {
             'row_id': row_id
             , 'model_id': model_id
@@ -289,52 +295,92 @@ class Concordia():
         return redis_result
 
 
+    def _get_features_to_save(self, model_id):
+        redis_key = self.make_redis_key_features(model_id)
+        redis_result = self.rdb.get(redis_key)
+        self.rdb.delete(redis_key)
+        if redis_result is None or redis_result is 'None':
+            mdb_result = self.retrieve_from_persistent_db(val_type='model_info', row_id=None, model_id=model_id)
+            if mdb_result is None or len(mdb_result) == 0:
+                return 'all'
+            else:
+                try:
+                    features = mdb_result[0]['features_to_save']
+                except KeyError:
+                    features = json.dumps('all')
+                self.rdb.set(redis_key, features)
+                redis_result = self.rdb.get(redis_key)
+
+        if isinstance(redis_result, bytes):
+            redis_result = redis_result.decode('utf-8')
+        redis_result = json.loads(redis_result)
+        return redis_result
+
+
+    def make_redis_key_features(self, model_id):
+        return '_concordia_{}_{}'.format(model_id, 'features_to_save')
+
+
     # This can handle both individual dictionaries and Pandas DataFrames as inputs
-    def add_data_and_predictions(self, model_id, features, predictions, row_ids, actuals=None, model_type=None):
+    def add_data_and_predictions(self, model_id, features, predictions, row_ids, actuals=None):
+        if not isinstance(features, pd.DataFrame):
+            print('Training features must be a pandas DataFrame, not a {}'.format(type(features)))
+            raise(TypeError('Training features must be a pandas DataFrame'))
 
         features = features.copy()
 
         features['row_id'] = row_ids
         features['model_id'] = model_id
-        features['model_type'] = model_type
+        features_to_save = self._get_features_to_save(model_id=model_id)
+        concordia_features_to_save = ['row_id', 'model_id']
 
-        if isinstance(features, pd.DataFrame):
-            prediction_docs = []
-            for idx, pred in enumerate(predictions):
-                if type(pred) not in self.valid_prediction_types:
-                    pred = list(pred)
-                pred_doc = {
-                    'prediction': pred
+        if features_to_save == 'all':
+            features_to_save = list(features.columns)
+        else:
+            features_to_save = features_to_save + concordia_features_to_save
+        prediction_docs = []
+        for idx, pred in enumerate(predictions):
+            if type(pred) not in self.valid_prediction_types:
+                pred = list(pred)
+            pred_doc = {
+                'prediction': pred
+                , 'row_id': row_ids.iloc[idx]
+                , 'model_id': model_id
+            }
+            prediction_docs.append(pred_doc)
+        predictions_df = pd.DataFrame(prediction_docs)
+
+        if actuals is not None:
+            actuals_docs = []
+            for idx, actual in enumerate(actuals):
+                actual_doc = {
+                    'label': actual
                     , 'row_id': row_ids.iloc[idx]
                     , 'model_id': model_id
                 }
-                prediction_docs.append(pred_doc)
-            predictions_df = pd.DataFrame(prediction_docs)
+                actuals_docs.append(actual_doc)
+            actuals_df = pd.DataFrame(actuals_docs)
 
-            if actuals is not None:
-                actuals_docs = []
-                for idx, actual in enumerate(actuals):
-                    actual_doc = {
-                        'label': actual
-                        , 'row_id': row_ids.iloc[idx]
-                        , 'model_id': model_id
-                    }
-                    actuals_docs.append(actual_doc)
-                actuals_df = pd.DataFrame(actuals_docs)
+        saving_features = features[features_to_save]
+        self.insert_into_persistent_db(val=saving_features, val_type='training_features')
 
+        self.insert_into_persistent_db(val=predictions_df, val_type='training_predictions')
 
-            self.insert_into_persistent_db(val=features, val_type='training_features')
+        if actuals is not None:
+            self.insert_into_persistent_db(val=actuals_df, val_type='training_labels')
 
-            self.insert_into_persistent_db(val=predictions_df, val_type='training_predictions')
-
-            if actuals is not None:
-                self.insert_into_persistent_db(val=actuals_df, val_type='training_labels')
-
-        elif isinstance(features, dict):
-            self.insert_into_persistent_db(val=features, val_type='training_features', row_id=row_id, model_id=model_id)
-            self.insert_into_persistent_db(val=predictions, val_type='training_predictions', row_id=row_id, model_id=model_id)
-            if actuals is not None:
-                self.insert_into_persistent_db(val=actuals, val_type='training_labels', row_id=row_id, model_id=model_id)
+        #     if features_to_save == 'all':
+        #         features_to_save = features.keys()
+        #     else:
+        #         features_to_save = features_to_save + concordia_features_to_save
+        #     saving_features = {}
+        #     for k, v in features.items():
+        #         if k in features_to_save:
+        #             saving_features[k] = v
+        #     self.insert_into_persistent_db(val=saving_features, val_type='training_features', row_id=row_id, model_id=model_id)
+        #     self.insert_into_persistent_db(val=predictions, val_type='training_predictions', row_id=row_id, model_id=model_id)
+        #     if actuals is not None:
+        #         self.insert_into_persistent_db(val=actuals, val_type='training_labels', row_id=row_id, model_id=model_id)
 
         return self
 
@@ -364,8 +410,14 @@ class Concordia():
 
         if row_id is None:
             row_id = features[self.default_row_id_field]
+
+        features_to_save = self._get_features_to_save(model_id=model_id)
+        if features_to_save == 'all':
+            saving_features = features
+        else:
+            saving_features = features[features_to_save]
         # FUTURE: input verification here before we get predictions.
-        self.insert_into_persistent_db(val=features, val_type='live_features', row_id=row_id, model_id=model_id)
+        self.insert_into_persistent_db(val=saving_features, val_type='live_features', row_id=row_id, model_id=model_id)
 
 
         if proba == True:
@@ -421,7 +473,21 @@ class Concordia():
                 del df_live[col]
             except:
                 pass
+
         df = pd.merge(df_live, df_train, on='row_id', how='inner', suffixes=('_live', '_train'))
+
+        if df.shape[0] == 0 and df_train.shape[0] > 0 and df_live.shape[0] > 0:
+            print('\nWe have saved data for both training and live environments, but were not able to match them together on shared row_id values. Here is some information about the row_id column to help you debug.')
+            print('\nTraining row_id.head')
+            print(df_train.row_id.head())
+            print('\nLive row_id.head')
+            print(df_live.row_id.head())
+            print('\nTraining row_id described:')
+            print(df_train.row_id.describe())
+            print('\nLive row_id described:')
+            print(df_live.row_id.describe())
+
+            warnings.warn('While we have saved data for this model_id for both live and training environments, we were not able to match them on the same row_id.')
         return df
 
 
@@ -456,6 +522,8 @@ class Concordia():
 
 
     def analyze_prediction_discrepancies(self, model_id, return_summary=True, return_deltas=True, return_matched_rows=False, sort_column=None, min_date=None, date_field=None, verbose=True, ignore_nans=True, ignore_duplicates=True):
+        # TODO 1: add input checking for min_date must be a datetime if date_field is none
+        # TODO 2: add logging if we have values for both training and live, but no matches when merging
 
         # 1. Get live data (only after min_date)
         live_predictions = self.retrieve_from_persistent_db(val_type='live_predictions', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
@@ -465,20 +533,27 @@ class Concordia():
         live_predictions = pd.DataFrame(live_predictions)
         training_predictions = pd.DataFrame(training_predictions)
 
+
         if ignore_nans == True:
-            print('Ignoring nans')
+            if verbose:
+                print('Ignoring nans')
             live_predictions = live_predictions[pd.notnull(live_predictions.prediction)]
             training_predictions = training_predictions[pd.notnull(training_predictions.prediction)]
 
         if ignore_duplicates == True:
-            print('Ignoring duplicates')
+            if verbose:
+                print('Ignoring duplicates')
             live_predictions.drop_duplicates(subset='row_id', inplace=True)
             training_predictions.drop_duplicates(subset='row_id', inplace=True)
 
+        print('Found {} relevant live predictions'.format(live_predictions.shape[0]))
+        print('Found a max of {} possibly relevant train predictions'.format(training_predictions.shape[0]))
         # 3. match them up (and provide a reconciliation of what rows do not match)
 
 
         df_live_and_train = self.match_training_and_live(df_live=live_predictions, df_train=training_predictions)
+
+        print('Found {} rows that appeared in both our training and live datasets'.format(df_live_and_train.shape[0]))
         # All of the above should be done using helper functions
         # 4. Go through and analyze all feature discrepancies!
             # Ideally, we'll have an "impact_on_predictions" column, though maybe only for our top 10 or top 100 features
@@ -543,7 +618,7 @@ class Concordia():
 
         results = {}
 
-        percentiles = [5, 25, 50, 75, 95]
+        percentiles = [5, 25, 50, 75, 95, 99]
 
         results['{}_num_rows_with_deltas'.format(prefix)] = len([x for x in deltas if x != 0])
         results['{}_num_rows_with_no_deltas'.format(prefix)] = len([x for x in deltas if x == 0])
@@ -598,13 +673,19 @@ class Concordia():
         training_features = self.retrieve_from_persistent_db(val_type='training_features', row_id=None, model_id=model_id, min_date=min_date, date_field=date_field)
 
         live_features = pd.DataFrame(live_features)
+        print('live_features.shape')
+        print(live_features.shape)
         training_features = pd.DataFrame(training_features)
+        print('training_features.shape')
+        print(training_features.shape)
 
         if ignore_duplicates == True:
-            if live_features.duplicated(subset='row_id').any():
+            if len(set(live_features['row_id'])) < live_features.shape[0]:
                 live_features.drop_duplicates(subset='row_id', inplace=True)
-            if training_features.duplicated(subset='row_id').any():
-                training_features.drop_duplicates(subset='row_id', inplace=True)
+            if len(set(training_features['row_id'])) < training_features.shape[0]:
+                # Keep the most recently added features
+                training_features.sort_values(by='_concordia_created_at', ascending=True, inplace=True)
+                training_features.drop_duplicates(subset='row_id', inplace=True, keep='last')
 
         # 3. match them up (and provide a reconciliation of what rows do not match)
         df_live_and_train = self.match_training_and_live(df_live=live_features, df_train=training_features)
@@ -626,8 +707,8 @@ class Concordia():
         summary_list = self.summarize_feature_deltas(df_deltas=deltas, feature_importances=feature_importances)
 
         if feature_importances is not None:
-            summary_list = sorted(summary_list, key=lambda val: val['feature_importance'], reverse=True)
-            printing_list = [val for val in summary_list if val['feature_importance'] > 0]
+            printing_list = sorted(summary_list, key=lambda val: val['feature_importance'], reverse=True)
+            # printing_list = [val for val in summary_list if val['feature_importance'] > 0]
         else:
             printing_list = summary_list
 
